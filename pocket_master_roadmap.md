@@ -465,6 +465,21 @@ Pocket is online.
 
 If any check fails, Pocket reports exactly what's wrong and waits rather than starting in a broken state. As more services are added in Stages 5-7, this becomes increasingly valuable.
 
+### 4j.1 — Continuous Self-Monitoring (bridge between 4j and 8k)
+
+Startup health checks confirm systems are alive at launch. This extends that awareness into the full session — Pocket monitors its own health continuously and surfaces problems before they become failures.
+
+**What to monitor:**
+- Ollama response latency — flag if responses are degrading
+- ChromaDB retrieval quality — are results still relevant, or is noise increasing?
+- WebSocket stability — connection drops, reconnect frequency
+- Expression accuracy — are fired expressions matching context?
+- Memory growth rate — is the store growing at a healthy pace or exploding?
+
+**How it works:** lightweight background thread that samples key metrics at intervals, writes to the structured log (4i), and surfaces warnings to user when thresholds are crossed. No action taken automatically — Pocket reports, user decides.
+
+**Why explicit:** this is the instrumentation layer that feeds Stage 8k (Self-Observability Dashboard). Without continuous data collection starting here, 8k has nothing meaningful to display. Build the monitoring early, build the dashboard later.
+
 ### 4k — Graceful Degradation
 
 Right now if Ollama drops mid-session, or ChromaDB becomes unreachable, pocket.py likely throws an unhandled exception and crashes. Before building on top of it, wrap core service calls in proper error handling so Pocket degrades gracefully:
@@ -654,6 +669,33 @@ This is the first piece of the Memory Vault. Reflection identifies *what matters
 
 > **Vault schema decision — do this before building 6d:** Before Pocket starts writing reflections, decide the top-level structure of the Memory Vault. Changing it after the Vault starts filling up is painful. Suggested starting categories: `projects/`, `people/`, `concepts/`, `tools/`, `lessons-learned/`, `goals/`. Each entry is a markdown file, interlinked with `[[wiki-style]]` references. Sketch this in a `vault-schema.md` file during Stage 6-Early so it's ready when 6d starts writing.
 
+### 6d.1 — Project Continuity Notes (idle behavior)
+
+Between sessions, Pocket reviews what was worked on, what was left unfinished, and what was in progress — then drafts a short "here's where we left off" summary ready for when user returns. Like coming back to a desk where someone has already laid everything out.
+
+**What it generates:**
+- What was being worked on at end of last session
+- Any unresolved questions or open threads
+- Files that were being modified
+- Next logical steps based on conversation context
+
+Displayed automatically on session start, or on demand via a `/continuity` command. Stored in the Vault under `projects/`. Builds directly on the reflection work in 6d — same engine, different output target.
+
+### 6d.2 — Passive Observation + Draft Proposals (idle behavior)
+
+During and between sessions, Pocket accumulates observations about its own behavior, recurring patterns, and potential improvements — then drafts proposals for user to review rather than acting on them immediately.
+
+**What Pocket observes:**
+- Expressions that fired but felt contextually off
+- Retrieval results that seemed irrelevant
+- Response patterns that got edited or corrected frequently
+- Capabilities that were asked for but don't exist yet
+- Repeated workflows that could be automated
+
+**How it works:** Pocket maintains a `proposals/` file or Vault section. During idle time it writes draft proposals — capability suggestions, config tweaks, self-improvement ideas — tagged with the observation that triggered them. user reviews on demand, approves or dismisses each one. Nothing is acted on without approval.
+
+This is the structured channel for Pocket's curiosity about its own improvement. Not a firehose — Pocket should surface a few thoughtful proposals per session, not dozens of noise.
+
 ### 6e — Emotional Continuity Layer
 
 Pocket tracks interaction tone, stress indicators, enthusiasm patterns, and recurring frustrations for better conversational continuity.
@@ -707,6 +749,32 @@ Every stored memory eventually gains metadata:
 
 Required pruning behaviors: duplicate collapsing, stale archival, low-value pruning, failed-attempt tagging, and an optional human review queue. Memory quality matters more than raw quantity — a smaller, cleaner base retrieves better than an infinitely growing one.
 
+### 6h.1 — Background Memory Housekeeping (idle behavior)
+
+The pruning and deduplication work in 6h runs on demand or triggered. This extends it into idle time — Pocket quietly performs memory maintenance in the background and surfaces a summary of what it found for user's review.
+
+**What it does during idle time:**
+- Scans for duplicate or near-duplicate memories and flags them for collapsing
+- Identifies memories that haven't been accessed in a long time and marks them as archival candidates
+- Tags low-confidence memories for review
+- Generates a brief housekeeping report — what was found, what's proposed, nothing changed without approval
+
+**Why background:** memory quality degrades silently. By the time retrieval feels noticeably worse, cleanup is a bigger job. Small regular passes keep the store healthy without a major intervention. Pocket surfaces findings; user approves changes.
+
+### 6h.2 — Knowledge Gap Flagging (idle behavior)
+
+Pocket tracks topics that came up in conversation where retrieval was weak, uncertain, or empty — and flags them as candidates for knowledge expansion during idle time.
+
+**What gets flagged:**
+- Queries where ChromaDB returned low-confidence results
+- Topics Pocket had to hedge or admit uncertainty on
+- Concepts referenced repeatedly but never explicitly loaded
+- Areas where Pocket's answers were corrected by user
+
+**How it works:** a lightweight `knowledge-gaps.md` log that accumulates during sessions. During idle time Pocket reviews and organizes the log, groups related gaps, and surfaces a prioritized list. user decides what to actually load or research — Pocket just tracks what's missing.
+
+Over time this becomes a self-directed learning queue: Pocket knows what it doesn't know and keeps a running list of what would make it more useful.
+
 ### Bookmark
 🔖 *"Let's build the depth systems for Pocket's intelligence layer"*
 
@@ -716,6 +784,18 @@ Required pruning behaviors: duplicate collapsing, stale archival, low-value prun
 **Priority: Advanced | Builds on Stages 4-6**
 
 With the permission layer from Stage 4 firmly in place, expand Pocket's reach across the system.
+
+### 7a — Session Pre-Loading (idle behavior)
+
+By Stage 7, Pocket has enough pattern recognition and session history to prepare for likely conversations before they start.
+
+**What it does:**
+- Learns user's usage patterns — time of day, day of week, recurring project cycles
+- Before a likely session, warms up relevant memories and context from ChromaDB
+- Pre-fetches Vault entries related to recently active projects
+- Has a brief "welcome back" continuity summary ready before the first message
+
+**Why Stage 7:** meaningful pre-loading requires multi-model routing (6f) to know which models to warm up, workspace awareness (6c) to understand session context, and filesystem access (Stage 7) to check recent file activity as a signal for what's likely coming. Earlier stages don't have enough signal to make pre-loading useful rather than noisy.
 
 ### Planned n8n Workflows (define before Stage 7 begins)
 
@@ -812,6 +892,20 @@ In practice: Pocket notices a project breakthrough and writes a wiki entry for i
 ### 8c — Sandbox Simulation Environment
 
 Pocket tests code, workflows, config changes, and avatar modifications inside isolated environments before requesting approval. Massively improves safety and trust.
+
+### 8c.1 — Sandboxed Dry Runs (idle behavior)
+
+Extends 8c from user-initiated testing into something Pocket can do on its own during idle time — running proposed changes through the sandbox, logging the outcome, and bringing user the results rather than just the idea.
+
+**How it works:**
+- Pocket has a proposal (from 6d.2 passive observation or its own reasoning)
+- Instead of just describing the idea, Pocket runs it in the sandbox first
+- Logs what happened — did it work, did it break anything, what were the side effects
+- Brings user: the proposal, the dry run result, and a recommendation
+
+**Why this matters:** the difference between "I think this would work" and "I tried it in isolation and here's what happened" is significant. Sandboxed dry runs turn Pocket's proposals from speculation into evidence. user still approves before anything touches the real system — but the conversation starts from a much better informed place.
+
+Requires: 8c sandbox environment fully stable before this is built on top of it.
 
 ### 8d — Adaptive Visual Identity
 
@@ -1082,6 +1176,7 @@ Why it belongs here: once you've built one yourself, fine-tuning (Level 4) and m
 - [ ] Web search — SearXNG or Tavily (Stage 4h)
 - [ ] Structured logging (Stage 4i)
 - [ ] Startup health checks — explicit service status on launch (Stage 4j)
+- [ ] Continuous self-monitoring — latency, retrieval quality, WebSocket, expression accuracy (Stage 4j.1)
 - [ ] Graceful degradation — Pocket reports failures, never silently crashes (Stage 4k)
 - [ ] Avatar self-modification (expressions, wander config, personality)
 
@@ -1107,15 +1202,20 @@ Why it belongs here: once you've built one yourself, fine-tuning (Level 4) and m
 
 ### Intelligence Layer — Late (6-Late)
 - [ ] Memory reflection — identifies what matters (Stage 6d) ← Vault Block 1
+- [ ] Project continuity notes — between-session summaries ready on return (Stage 6d.1)
+- [ ] Passive observation + draft proposals — Pocket surfaces improvement ideas for review (Stage 6d.2)
 - [ ] Emotional continuity / mood awareness (Stage 6e)
 - [ ] Multi-model routing (Stage 6f)
 - [ ] Context window management — session summarization + priority injection (Stage 6g)
 - [ ] Memory metadata scoring system (Stage 6h)
 - [ ] Duplicate memory collapsing + stale archival/pruning (Stage 6h)
 - [ ] Retrieval quality controls (Stage 6h)
+- [ ] Background memory housekeeping — idle dedup + archival proposals (Stage 6h.1)
+- [ ] Knowledge gap flagging — tracks what Pocket doesn't know, surfaces learning candidates (Stage 6h.2)
 
 ### Computer & Program Access
 - [ ] n8n workflow inventory maintained during Stages 4-6 (ready for Stage 7)
+- [ ] Session pre-loading — context warmed up before likely sessions (Stage 7a)
 - [ ] Sandboxed program access with per-action approval (Stage 7)
 - [ ] VS Code / IDE integration (Stage 7)
 - [ ] n8n webhook triggers (Stage 7)
@@ -1127,6 +1227,7 @@ Why it belongs here: once you've built one yourself, fine-tuning (Level 4) and m
 - [ ] Avatar intelligence module — co-pilot, not autonomous (Stage 8a)
 - [ ] Memory Vault — wiki-style self-building long-term memory (Stage 8b)
 - [ ] Sandbox simulation environment (Stage 8c)
+- [ ] Sandboxed dry runs — Pocket tests proposals in isolation before presenting results (Stage 8c.1)
 - [ ] Background reflection loop — writes to the Vault (Stage 8f)
 - [ ] Pocket Workspace dashboard (Stage 8e)
 - [ ] Episodic Memory Timeline — reconstruct project eras and periods (Stage 8h)
@@ -1187,4 +1288,4 @@ Core stability always comes first. Future modules plug into Pocket — they don'
 
 ---
 
-*Built May 2026 | Stages 1–3 complete — Pocket is alive, present, and talking. Live2D model is the next gate. Stage 4 in progress as of May 13, 2026. Last consolidated: May 2026 — integrates Architecture Hardening Addendum (4m–4p, 5d–5f, 6h), Future Ideas Vol. 2 (15 long-term features, mapped and deduplicated into Stages 8–9+), and review pass (Stage 4 reordered: 4i.1/4l/4m/4o moved to Day 1; 4d deferred to Live2D arrival; 4p expanded with /read path restriction and config management; 4e.1 expanded with ChromaDB collection convention; 4g.1 expanded with rollback scope note; dependency snapshot added to 4i.1). Session 1 (May 13): 4i.1 and 4l complete.*
+*Built May 2026 | Stages 1–3 complete — Pocket is alive, present, and talking. Live2D model is the next gate. Stage 4 in progress as of May 13, 2026. Last consolidated: May 2026 — integrates Architecture Hardening Addendum (4m–4p, 5d–5f, 6h), Future Ideas Vol. 2 (15 long-term features, mapped and deduplicated into Stages 8–9+), review pass (Stage 4 reordered; 4p/4e.1/4g.1 expanded; dependency snapshot added), and Session 1 additions (4j.1 continuous self-monitoring; 6d.1 project continuity notes; 6d.2 passive observation + draft proposals; 6h.1 background memory housekeeping; 6h.2 knowledge gap flagging; 7a session pre-loading; 8c.1 sandboxed dry runs). Session 1 (May 13): 4i.1 and 4l complete.*
