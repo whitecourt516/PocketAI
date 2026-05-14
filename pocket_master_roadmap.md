@@ -1,7 +1,7 @@
 # Pocket — Master Project Roadmap (Consolidated)
 **Setup:** Ollama | 10-12GB VRAM | Windows Host | Docker Compose
 **Goal:** A fully local, voice-enabled personal AI companion with persistent memory, screen awareness, code execution, and a visual avatar that grows alongside you.
-**Last updated:** May 2026
+**Last updated:** May 13, 2026
 
 ---
 
@@ -19,6 +19,10 @@
 | Whisper STT | ✅ Running | F9 push-to-talk, offline |
 | Piper TTS | ✅ Running | Pocket speaks back, fully offline |
 | pocket.py unified engine | ✅ Running | Voice + text + avatar + memory in one script |
+| Git repo | ✅ Initialized | 4 commits, stage-3-complete + stage-4-start tags |
+| .gitignore | ✅ Done | Excludes pycache, .env, chroma_data, backups, model weights, node_modules |
+| requirements.txt | ✅ Done | Dependency snapshot committed at Stage 4 start |
+| pocket-identity.md | ✅ Done | Canonical identity document, committed to repo |
 
 ---
 
@@ -154,7 +158,12 @@ All animation work in Stage 5 (dynamic idle behaviors, environmental reactions, 
 ---
 
 ## Stage 4 — Architecture Hardening + Self-Improvement
-**Priority: Next | Estimated time: 1-2 weekends**
+**Priority: In Progress | Started: May 13, 2026**
+
+### Session Log
+| Date | Completed |
+|------|-----------|
+| 2026-05-13 | 4i.1 — Git init, CHANGELOG.md, requirements.txt, .gitignore / 4l — pocket-identity.md |
 
 > **Why this stage was expanded:** The two future-ideas files both identified the same critical point — architectural decisions made here prevent painful rewrites later. Self-improvement capabilities and structural hardening belong together in the same stage. The order below is deliberate — infrastructure and safety rails first, then capability on top of them.
 
@@ -1046,9 +1055,9 @@ Why it belongs here: once you've built one yourself, fine-tuning (Level 4) and m
 - [ ] Adaptive visual identity / seasonal themes (Stage 8d)
 
 ### Architecture & Self-Improvement
-- [ ] Git repo initialized + CHANGELOG.md convention (Stage 4i.1 — Day 1)
-- [ ] Dependency snapshot — requirements.txt committed (Stage 4i.1 — Day 1)
-- [ ] Pocket identity document — pocket-identity.md (Stage 4l — Day 1, before self-modification)
+- [x] Git repo initialized + CHANGELOG.md convention (Stage 4i.1 — Day 1)
+- [x] Dependency snapshot — requirements.txt committed (Stage 4i.1 — Day 1)
+- [x] Pocket identity document — pocket-identity.md (Stage 4l — Day 1, before self-modification)
 - [ ] Docker backup + restore system (Stage 4m — Day 1, before anything worth losing exists)
 - [ ] Restore verification test — confirmed boot from backup (Stage 4m)
 - [ ] TROUBLESHOOTING.md with common recovery paths (Stage 4o — early infrastructure)
@@ -1178,4 +1187,4 @@ Core stability always comes first. Future modules plug into Pocket — they don'
 
 ---
 
-*Built May 2026 | Stages 1–3 complete — Pocket is alive, present, and talking. Live2D model is the next gate. Start Stage 4 when the real otter is in place. Last consolidated: May 2026 — integrates Architecture Hardening Addendum (4m–4p, 5d–5f, 6h), Future Ideas Vol. 2 (15 long-term features, mapped and deduplicated into Stages 8–9+), and review pass (Stage 4 reordered: 4i.1/4l/4m/4o moved to Day 1; 4d deferred to Live2D arrival; 4p expanded with /read path restriction and config management; 4e.1 expanded with ChromaDB collection convention; 4g.1 expanded with rollback scope note; dependency snapshot added to 4i.1).*
+*Built May 2026 | Stages 1–3 complete — Pocket is alive, present, and talking. Live2D model is the next gate. Stage 4 in progress as of May 13, 2026. Last consolidated: May 2026 — integrates Architecture Hardening Addendum (4m–4p, 5d–5f, 6h), Future Ideas Vol. 2 (15 long-term features, mapped and deduplicated into Stages 8–9+), and review pass (Stage 4 reordered: 4i.1/4l/4m/4o moved to Day 1; 4d deferred to Live2D arrival; 4p expanded with /read path restriction and config management; 4e.1 expanded with ChromaDB collection convention; 4g.1 expanded with rollback scope note; dependency snapshot added to 4i.1). Session 1 (May 13): 4i.1 and 4l complete.*
