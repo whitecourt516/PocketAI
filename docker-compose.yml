@@ -1,0 +1,43 @@
+services:
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  memory-chat:
+    build: .
+    container_name: memory-chat
+    volumes:
+      - ./chroma_data:/app/chroma_data
+    depends_on:
+      - ollama
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    ports:
+      - "5000:5000"  
+    stdin_open: true
+    tty: true
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+  n8n_data:
