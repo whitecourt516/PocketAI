@@ -53,9 +53,9 @@ Stage 2 — Voice (Whisper + Piper)                        ✅ COMPLETE
     ↓
 Stage 3 — Interface & Avatar (Electron app)               ✅ COMPLETE
     ↓
-⛔ HARD STOP — Real Live2D otter model must be in place
+Stage 4 — Architecture Hardening + Self-Improvement       ← IN PROGRESS
     ↓
-Stage 4 — Architecture Hardening + Self-Improvement       ← NEXT
+⛔ HARD STOP — Real Live2D otter model must be in place
     ↓
 Stage 5 — Screen Awareness + Dynamic Behavior
     ↓
@@ -137,26 +137,6 @@ Pocket has a visual identity — an animated otter avatar that lives on user's d
 
 ---
 
-## ⛔ HARD STOP — Live2D Otter Model
-**Must be complete before Stage 4 begins**
-
-The real Live2D rigged `.moc3` otter model must be in place before any further development starts. This is a hard gate, not a soft recommendation.
-
-**Why it's a gate and not a parallel task:**
-
-All animation work in Stage 5 (dynamic idle behaviors, environmental reactions, mouse tracking) will be built against the avatar's expression and physics systems. If that work is done against the placeholder SVG, it will need to be partially redone when the real model lands — and the real model may have different parameters, timing, and physics behavior that changes how everything feels. Build it once, build it right.
-
-**What "in place" means:**
-- `.moc3` export dropped into `pocket-avatar/model/`
-- Live2D loader uncommented in `avatar.html`
-- All 9 current expressions mapped and confirmed working
-- Wandering and subtitle behavior confirmed on real model
-- Physics and breathing confirmed stable
-
-**Do not start Stage 4 until this checklist is complete.**
-
----
-
 ## Stage 4 — Architecture Hardening + Self-Improvement
 **Priority: In Progress | Started: May 13, 2026**
 
@@ -164,10 +144,11 @@ All animation work in Stage 5 (dynamic idle behaviors, environmental reactions, 
 | Date | Completed |
 |------|-----------|
 | 2026-05-13 | 4i.1 — Git init, CHANGELOG.md, requirements.txt, .gitignore / 4l — pocket-identity.md |
+| 2026-05-14 | 4m — Docker backup + recovery strategy / pocket_backup.bat confirmed clean / orphan volumes removed |
 
 > **Why this stage was expanded:** The two future-ideas files both identified the same critical point — architectural decisions made here prevent painful rewrites later. Self-improvement capabilities and structural hardening belong together in the same stage. The order below is deliberate — infrastructure and safety rails first, then capability on top of them.
 
-> **Order rationale:** Git/backup/troubleshooting go first because they protect everything you build afterward. Identity document is written on Day 1 alongside Git — before any self-modification work, including the data-driven expression config. Security threat model must precede the executor. `/read` path restrictions are defined alongside 4p, not separately. WebSocket reconnection must be solid before Stage 5 introduces multiple concurrent avatar event sources. 4d (avatar asset structure) is deferred until the real Live2D model is in place — it's the one Stage 4 task that touches the avatar directly.
+> **Order rationale:** Git/backup/troubleshooting go first because they protect everything you build afterward. Identity document is written on Day 1 alongside Git — before any self-modification work, including the data-driven expression config. Security threat model must precede the executor. `/read` path restrictions are defined alongside 4p, not separately. WebSocket reconnection must be solid before Stage 5 introduces multiple concurrent avatar event sources. 4d (avatar asset structure) has been moved to Stage 5 — it requires the real Live2D model and belongs at the start of Stage 5 after the hard gate is cleared.
 
 > **What to skip until the Live2D model is ready:** 4d only. All other Stage 4 tasks are pure Python/backend work and have no dependency on the real model.
 
@@ -319,23 +300,6 @@ Create a consistent websocket/API command structure now, before avatar systems m
   "expression": "happy",
   "duration": 1.2
 }
-```
-
-### 4d — Organize Avatar Assets
-**⏸ Defer until Live2D model is in place**
-
-This is the one Stage 4 task that requires the real model. Setting up the folder structure before the `.moc3` files exist means doing it twice. Do all other Stage 4 work first, then come back to this when the model lands.
-
-```
-pocket-avatar/
-├── models/
-│   ├── otter_v1/
-│   └── experimental/
-├── expressions/
-├── physics/
-├── animations/
-├── configs/
-└── exports/
 ```
 
 ### 4p — Security + Threat Model + Config Management
@@ -503,6 +467,47 @@ Pocket should never silently die. It should always tell you what's wrong.
 > **Consolidation note:** Dynamic idle behaviors (ambient animations, mouse reactions, sleepy states) were listed in both future-ideas files as Stage 5-6. They belong here alongside screen awareness since both are about Pocket perceiving and reacting to its environment.
 
 > **Order rationale:** VRAM management and privacy boundaries must be defined *before* loading a vision model or taking screenshots. Expression arbitration must be in place *before* introducing concurrent behavior sources (idle + conversation + workspace). Infrastructure first, then the capabilities that depend on it.
+
+## ⛔ HARD STOP — Live2D Otter Model
+**Must be complete before Stage 5 begins**
+
+The real Live2D rigged `.moc3` otter model must be in place before Stage 5 begins. This is a hard gate, not a soft recommendation.
+
+**Why it's a gate and not a parallel task:**
+
+All animation work in Stage 5 (dynamic idle behaviors, environmental reactions, mouse tracking) will be built against the avatar's expression and physics systems. If that work is done against the placeholder SVG, it will need to be partially redone when the real model lands — and the real model may have different parameters, timing, and physics behavior that changes how everything feels. Build it once, build it right.
+
+**What "in place" means:**
+- `.moc3` export dropped into `pocket-avatar/model/`
+- Live2D loader uncommented in `avatar.html`
+- All 9 current expressions mapped and confirmed working
+- Wandering and subtitle behavior confirmed on real model
+- Physics and breathing confirmed stable
+
+**Do not start Stage 5 until this checklist is complete.**
+
+---
+
+### 5d-pre — Organize Avatar Assets
+**First task of Stage 5 — do immediately after Live2D gate is cleared**
+
+> **Note:** This task was originally 4d in Stage 4 and was deferred here because it requires the real `.moc3` model to be in place. Do not attempt before the hard gate above is complete.
+
+Set up the avatar asset folder structure against the real model files:
+
+```
+pocket-avatar/
+├── models/
+│   ├── otter_v1/
+│   └── experimental/
+├── expressions/
+├── physics/
+├── animations/
+├── configs/
+└── exports/
+```
+
+---
 
 ### 5d — VRAM Budget + Model Lifecycle Management
 **Priority: REQUIRED — do this before 5a (loading LLaVA)**
@@ -1152,14 +1157,14 @@ Why it belongs here: once you've built one yourself, fine-tuning (Level 4) and m
 - [x] Git repo initialized + CHANGELOG.md convention (Stage 4i.1 — Day 1)
 - [x] Dependency snapshot — requirements.txt committed (Stage 4i.1 — Day 1)
 - [x] Pocket identity document — pocket-identity.md (Stage 4l — Day 1, before self-modification)
-- [ ] Docker backup + restore system (Stage 4m — Day 1, before anything worth losing exists)
-- [ ] Restore verification test — confirmed boot from backup (Stage 4m)
+- [x] Docker backup + restore system (Stage 4m — completed 2026-05-14)
+- [x] Restore verification test — confirmed boot from backup (Stage 4m — confirmed 2026-05-14)
 - [ ] TROUBLESHOOTING.md with common recovery paths (Stage 4o — early infrastructure)
 - [ ] Modular architecture (Stage 4a)
 - [ ] Smoke test suite — confirms all core systems alive after changes (Stage 4a.1)
 - [ ] Data-driven expression config (Stage 4b)
 - [ ] Standardized avatar commands (Stage 4c)
-- [ ] Organized avatar asset structure (Stage 4d — ⏸ defer until Live2D model is in place)
+- [ ] Organized avatar asset structure (Stage 5d-pre — moved to Stage 5, first task after Live2D gate)
 - [ ] Threat model + security policy (Stage 4p — before executor)
 - [ ] Config and secrets centralized — config.yaml or .env loader (Stage 4p)
 - [ ] Executor denylist or allowlisted tool wrappers (Stage 4p)
