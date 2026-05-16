@@ -1,128 +1,295 @@
-\# Troubleshooting Guide
+# Troubleshooting Guide
 
+# Purpose
 
+This document contains operational troubleshooting procedures for Pocket.
 
-\## Ollama Not Responding
+Goals:
+- Diagnose runtime failures
+- Recover broken services
+- Verify system integrity
+- Standardize debugging workflow
+- Preserve operational knowledge
 
+This document is intended for:
+- Human debugging
+- Future AI-assisted troubleshooting
+- Recovery documentation
+- Development continuity
 
+---
 
-\### Symptoms
+# General Diagnostic Workflow
 
-\- Pocket hangs while generating
+When Pocket experiences problems:
 
-\- No response returned
+1. Identify affected subsystem
+2. Verify service availability
+3. Check logs/output
+4. Confirm dependency health
+5. Attempt subsystem restart
+6. Escalate to recovery procedures if needed
 
-\- Connection errors
+---
 
+# Startup Failures
 
+## Ollama Not Responding
 
-\### Checks
+### Symptoms
+- Pocket hangs while generating
+- No response returned
+- Connection errors
+- Model requests timeout
+
+### Checks
 
 ```bash
-
 ollama list
-
 ```
-
-
 
 ```bash
-
 docker ps
-
 ```
 
+Verify:
+- Ollama service is running
+- Model exists
+- GPU resources available
 
+### Fixes
+- Restart Ollama
+- Restart Docker containers
+- Verify GPU availability
+- Re-pull damaged model if necessary
 
-\### Fixes
+---
 
-\- Restart Ollama
+## Docker Container Failure
 
-\- Restart Docker containers
+### Symptoms
+- Services unavailable
+- ChromaDB inaccessible
+- Startup failures
 
-\- Verify GPU availability
+### Checks
 
+```bash
+docker ps
+```
 
+```bash
+docker compose logs
+```
 
-\---
+### Fixes
+- Restart containers
+- Verify mounted volumes
+- Check port conflicts
+- Rebuild containers if corrupted
 
+---
 
+# Memory System Issues
 
-\## ChromaDB Issues
+## ChromaDB Issues
 
+### Symptoms
+- Memory retrieval empty
+- Errors during storage
+- Persistence failure
+- Missing contextual memory
 
-
-\### Symptoms
-
-\- Memory retrieval empty
-
-\- Errors during storage
-
-\- Persistence failure
-
-
-
-\### Checks
+### Checks
 
 Verify:
 
 ```text
-
-chroma\_data/
-
+chroma_data/
 ```
 
 exists and is mounted correctly.
 
+Verify:
+- Database files exist
+- Disk space available
+- Containers mounted properly
 
+### Fixes
+- Restart containers
+- Restore from backup if corrupted
+- Rebuild memory collection if necessary
 
-\### Fixes
+### Escalation
+If corruption persists:
+1. Stop services
+2. Restore latest stable backup
+3. Verify retrieval functionality
+4. Re-index memory if needed
 
-\- Restart containers
+---
 
-\- Restore from backup if corrupted
+# Voice System Issues
 
+## Whisper Failure
 
+### Symptoms
+- No transcription
+- Delayed recognition
+- Incorrect speech parsing
 
-\---
+### Checks
+- Verify microphone permissions
+- Verify Whisper model loaded
+- Test microphone input independently
 
+### Fixes
+- Restart transcription service
+- Reload model
+- Reconnect audio devices
 
+---
 
-\## Electron Avatar Not Appearing
+## Piper TTS Failure
 
+### Symptoms
+- Text output works
+- No speech audio
+- Distorted speech
+- Delayed playback
 
+### Checks
+- Verify Piper executable
+- Check output device
+- Verify voice model exists
+- Confirm audio routing
 
-\### Checks
+### Fixes
+- Restart audio services
+- Reload Piper model
+- Reconnect audio devices
 
-\- WebSocket port available
+---
 
-\- Electron app launched
+# Avatar System Issues
 
-\- No hidden window state
+## Electron Avatar Not Appearing
 
+### Symptoms
+- No avatar window
+- Frozen frontend
+- Blank Electron application
 
+### Checks
+- WebSocket port available
+- Electron app launched
+- No hidden window state
+- Node modules installed
 
-\---
+### Commands
 
+```bash
+npm install
+```
 
+```bash
+npm start
+```
 
-\## Piper TTS Failure
+### Fixes
+- Restart Electron app
+- Reinstall node modules
+- Verify frontend/backend communication
 
+---
 
+## Expression Engine Failure
 
-\### Symptoms
+### Symptoms
+- Avatar not reacting
+- Incorrect emotional states
+- Animation desynchronization
 
-\- Text output works
+### Checks
+- Verify WebSocket connection
+- Verify expression mapping logic
+- Confirm backend emotion state output
 
-\- No speech audio
+### Fixes
+- Restart frontend
+- Reset expression state
+- Simplify conflicting animation logic
 
+---
 
+# Repository / Git Issues
 
-\### Fixes
+## Git Ignore Problems
 
-\- Verify Piper executable
+### Symptoms
+- Runtime data tracked accidentally
+- Large files pushed to repository
+- Repository size growth
 
-\- Check output device
+### Checks
 
-\- Restart audio services
+```bash
+git status
+```
 
+```bash
+git ls-files
+```
+
+### Fixes
+- Update `.gitignore`
+- Remove cached tracking:
+
+```bash
+git rm -r --cached <path>
+```
+
+---
+
+# Emergency Recovery
+
+## Restore From Backup
+
+### Procedure
+
+1. Stop all services
+2. Backup current broken state
+3. Restore latest stable backup
+4. Restart services
+5. Verify:
+   - memory retrieval
+   - voice systems
+   - avatar systems
+   - frontend communication
+
+---
+
+# Verification Checklist
+
+After major fixes verify:
+
+- Ollama responding
+- ChromaDB mounted
+- Voice input functioning
+- TTS output functioning
+- Avatar responding
+- WebSocket connected
+- Memory retrieval functioning
+- No critical console errors
+
+---
+
+# Future Expansion Areas
+
+Planned future troubleshooting coverage:
+- autonomous systems
+- tool execution
+- memory pruning
+- multi-agent coordination
+- procedural animation
+- environment interaction systems
