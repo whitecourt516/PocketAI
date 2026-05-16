@@ -5,6 +5,7 @@ venv/
 .venv/
 
 chroma_data/
+n8n_data/
 pocket_backups/
 logs/
 

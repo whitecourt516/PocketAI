@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pocket</title>
+  <style>
+    /* ── Reset ── */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 300px;
+      height: 400px;
+      overflow: hidden;
+      background: transparent;
+      -webkit-app-region: no-drag;
+      user-select: none;
+    }
+
+    /* ── Avatar container ── */
+    #avatar-root {
+      position: relative;
+      width: 300px;
+      height: 400px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    /* ── Live2D canvas (when real model is loaded) ── */
+    #live2d-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 300px;
+      height: 360px;
+      display: none; /* shown when model loads */
+    }
+
+    /* ── Placeholder otter (shown until real model is ready) ── */
+    #placeholder {
+      position: absolute;
+      top: 0; left: 0;
+      width: 300px;
+      height: 360px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .otter-svg {
+      width: 180px;
+      height: 220px;
+      filter: drop-shadow(0 8px 24px rgba(0,0,0,0.3));
+      transition: transform 0.3s ease;
+      animation: idle-breathe 3s ease-in-out infinite;
+    }
+
+    @keyframes idle-breathe {
+      0%, 100% { transform: translateY(0px) scale(1); }
+      50%       { transform: translateY(-6px) scale(1.01); }
+    }
+
+    /* Expression state classes */
+    .otter-svg.happy    { animation: idle-breathe 3s ease-in-out infinite, happy-bounce 0.5s ease; }
+    .otter-svg.thinking { animation: idle-breathe 3s ease-in-out infinite; filter: drop-shadow(0 8px 24px rgba(100,120,180,0.4)); }
+    .otter-svg.surprised { animation: surprised-pop 0.3s ease; }
+    .otter-svg.sleepy   { filter: drop-shadow(0 8px 24px rgba(0,0,0,0.2)) brightness(0.9); }
+    .otter-svg.concerned { animation: idle-breathe 4s ease-in-out infinite; filter: drop-shadow(0 8px 24px rgba(180,100,80,0.3)); }
+
+    @keyframes happy-bounce {
+      0%   { transform: translateY(0); }
+      30%  { transform: translateY(-16px) scale(1.05); }
+      60%  { transform: translateY(-6px); }
+      100% { transform: translateY(0); }
+    }
+
+    @keyframes surprised-pop {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.12); }
+      100% { transform: scale(1); }
+    }
+
+    /* Expression label (dev helper — hidden in prod) */
+    #expression-label {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Segoe UI', sans-serif;
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      background: rgba(0,0,0,0.3);
+      padding: 2px 8px;
+      border-radius: 99px;
+      pointer-events: none;
+      display: none; /* set to block to debug */
+    }
+
+    /* ── Subtitle bubble ── */
+    #subtitle {
+      position: absolute;
+      bottom: 44px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 280px;
+      min-width: 80px;
+      background: rgba(20, 20, 28, 0.88);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 10px 16px;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      color: rgba(255, 255, 255, 0.92);
+      text-align: center;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      pointer-events: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    #subtitle.visible {
+      opacity: 1;
+    }
+
+    /* Little tail on the subtitle bubble */
+    #subtitle::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0; height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 8px solid rgba(20, 20, 28, 0.88);
+    }
+
+    /* ── Name tag ── */
+    #nametag {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Segoe UI', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: rgba(255,255,255,0.35);
+      pointer-events: none;
+    }
+
+    /* ── Thinking dots ── */
+    #thinking-dots {
+      display: none;
+      gap: 4px;
+      position: absolute;
+      bottom: 52px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    #thinking-dots.visible { display: flex; }
+
+    .dot {
+      width: 7px; height: 7px;
+      background: rgba(255,255,255,0.6);
+      border-radius: 50%;
+      animation: dot-pulse 1.2s ease-in-out infinite;
+    }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes dot-pulse {
+      0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
+      40%            { transform: scale(1);   opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="avatar-root">
+
+  <!-- Expression label (dev helper) -->
+  <div id="expression-label">neutral</div>
+
+  <!-- Placeholder SVG otter — replaced by Live2D when model is ready -->
+  <div id="placeholder">
+    <svg class="otter-svg" id="otter-placeholder" viewBox="0 0 180 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Body -->
+      <ellipse cx="90" cy="150" rx="52" ry="62" fill="#6B4C3B"/>
+      <!-- Belly -->
+      <ellipse cx="90" cy="158" rx="32" ry="42" fill="#C4956A"/>
+      <!-- Head -->
+      <ellipse cx="90" cy="82" rx="46" ry="44" fill="#6B4C3B"/>
+      <!-- Muzzle -->
+      <ellipse cx="90" cy="96" rx="22" ry="16" fill="#C4956A"/>
+      <!-- Nose -->
+      <ellipse cx="90" cy="88" rx="7" ry="5" fill="#2C1A12"/>
+      <!-- Left eye -->
+      <circle cx="74" cy="76" r="9" fill="#1A0F0A"/>
+      <circle cx="74" cy="76" r="6" fill="#3D2010"/>
+      <circle cx="76" cy="74" r="2.5" fill="white"/>
+      <!-- Right eye -->
+      <circle cx="106" cy="76" r="9" fill="#1A0F0A"/>
+      <circle cx="106" cy="76" r="6" fill="#3D2010"/>
+      <circle cx="108" cy="74" r="2.5" fill="white"/>
+      <!-- Left ear -->
+      <ellipse cx="54" cy="50" rx="12" ry="10" fill="#6B4C3B"/>
+      <ellipse cx="54" cy="50" rx="7" ry="6" fill="#8B6355"/>
+      <!-- Right ear -->
+      <ellipse cx="126" cy="50" rx="12" ry="10" fill="#6B4C3B"/>
+      <ellipse cx="126" cy="50" rx="7" ry="6" fill="#8B6355"/>
+      <!-- Whiskers left -->
+      <line x1="68" y1="95" x2="28" y2="90" stroke="#C4956A" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
+      <line x1="68" y1="99" x2="26" y2="99" stroke="#C4956A" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
+      <line x1="68" y1="103" x2="28" y2="108" stroke="#C4956A" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
+      <!-- Whiskers right -->
+      <line x1="112" y1="95" x2="152" y2="90" stroke="#C4956A" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
+      <line x1="112" y1="99" x2="154" y2="99" stroke="#C4956A" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
+      <line x1="112" y1="103" x2="152" y2="108" stroke="#C4956A" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
+      <!-- Scarf -->
+      <ellipse cx="90" cy="122" rx="38" ry="10" fill="#4A6741"/>
+      <rect x="82" y="118" width="16" height="18" rx="4" fill="#3D5535"/>
+      <!-- Left arm -->
+      <ellipse cx="44" cy="158" rx="14" ry="26" fill="#6B4C3B" transform="rotate(-10 44 158)"/>
+      <!-- Right arm -->
+      <ellipse cx="136" cy="158" rx="14" ry="26" fill="#6B4C3B" transform="rotate(10 136 158)"/>
+      <!-- Tail -->
+      <ellipse cx="76" cy="205" rx="28" ry="12" fill="#5A3D2E" transform="rotate(-20 76 205)"/>
+      <!-- Left paw -->
+      <ellipse cx="38" cy="182" rx="12" ry="8" fill="#5A3D2E"/>
+      <!-- Right paw -->
+      <ellipse cx="142" cy="182" rx="12" ry="8" fill="#5A3D2E"/>
+    </svg>
+  </div>
+
+  <!-- Live2D canvas (shown when real model loads) -->
+  <canvas id="live2d-canvas"></canvas>
+
+  <!-- Thinking dots (shown while Pocket processes) -->
+  <div id="thinking-dots">
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+
+  <!-- Subtitle bubble -->
+  <div id="subtitle"></div>
+
+  <!-- Name tag -->
+  <div id="nametag">POCKET</div>
+
+</div>
+
+<!-- Live2D SDK (load if model present) -->
+<!-- <script src="../model/live2dcubismcore.min.js"></script> -->
+<!-- <script src="../model/pixi.min.js"></script> -->
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Avatar renderer script
+// Handles: expressions, subtitles, thinking state, Live2D (when ready)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const otterEl    = document.getElementById('otter-placeholder');
+const subtitleEl = document.getElementById('subtitle');
+const dotsEl     = document.getElementById('thinking-dots');
+const labelEl    = document.getElementById('expression-label');
+
+let subtitleTimer = null;
+let currentExpression = 'neutral';
+
+// ── Expressions ───────────────────────────────────────────────────────────────
+const EXPRESSIONS = {
+  neutral:   { label: 'neutral' },
+  happy:     { label: 'happy' },
+  excited:   { label: 'excited' },
+  thinking:  { label: 'thinking', dots: true },
+  surprised: { label: 'surprised' },
+  sleepy:    { label: 'sleepy' },
+  concerned: { label: 'concerned' },
+  smug:      { label: 'smug' },
+  sad:       { label: 'sad' },
+};
+
+function setExpression(name) {
+  const expr = EXPRESSIONS[name] || EXPRESSIONS.neutral;
+  currentExpression = name;
+
+  // Remove all expression classes
+  otterEl.className = 'otter-svg';
+  if (name !== 'neutral') otterEl.classList.add(name);
+
+  // Show/hide thinking dots
+  if (expr.dots) {
+    dotsEl.classList.add('visible');
+  } else {
+    dotsEl.classList.remove('visible');
+  }
+
+  // Update dev label
+  labelEl.textContent = name;
+}
+
+// ── Subtitles ─────────────────────────────────────────────────────────────────
+function showSubtitle({ text, duration = 4000 }) {
+  if (subtitleTimer) clearTimeout(subtitleTimer);
+
+  subtitleEl.textContent = text;
+  subtitleEl.classList.add('visible');
+
+  subtitleTimer = setTimeout(() => {
+    subtitleEl.classList.remove('visible');
+  }, duration);
+}
+
+// ── IPC from main process ─────────────────────────────────────────────────────
+if (window.pocket) {
+  window.pocket.onExpression((expr) => setExpression(expr));
+  window.pocket.onSubtitle((data) => showSubtitle(data));
+
+  window.pocket.onWander(({ x, y, duration }) => {
+    // Visual nudge on wander — subtle tilt
+    otterEl.style.transition = `transform ${duration * 0.3}ms ease`;
+    const tilt = Math.random() > 0.5 ? 3 : -3;
+    otterEl.style.transform = `rotate(${tilt}deg)`;
+    setTimeout(() => {
+      otterEl.style.transform = '';
+    }, duration * 0.6);
+  });
+}
+
+// ── Live2D loader (called when real model is dropped in) ──────────────────────
+// This will be expanded when your otter moc3 is ready.
+// For now the placeholder SVG handles all visual states.
+function loadLive2DModel(modelPath) {
+  console.log('[Pocket] Live2D model path set:', modelPath);
+  // TODO: initialize PIXI + Live2DSprite with modelPath
+  // document.getElementById('placeholder').style.display = 'none';
+  // document.getElementById('live2d-canvas').style.display = 'block';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+setExpression('neutral');
+console.log('[Pocket] Avatar renderer ready');
+</script>
+
+</body>
+</html>
