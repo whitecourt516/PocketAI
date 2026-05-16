@@ -1,21 +1,44 @@
+# =========================
+# Python
+# =========================
 __pycache__/
 *.pyc
-.env
 venv/
 .venv/
 
-chroma_data/
-n8n_data/
-pocket_backups/
-logs/
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.local
 
+# =========================
+# Node / Electron
+# =========================
 node_modules/
 dist/
 build/
 
-*.onnx
-*.pt
-*.pth
+# =========================
+# Runtime Data
+# =========================
+chroma_data/
+pocket_backups/
+logs/
+*.log
+*.sqlite3
 
+# =========================
+# AI Models / Assets
+# =========================
+models/
+piper/voices/
+*.onnx
+*.bin
+
+# =========================
+# OS / Editor
+# =========================
 .DS_Store
 Thumbs.db
+.vscode/
