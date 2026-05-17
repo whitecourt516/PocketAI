@@ -18,7 +18,8 @@ import time
 
 import websockets
 
-AVATAR_WS_URL = "ws://localhost:7845"
+from core.config_loader import CFG
+AVATAR_WS_URL = CFG["avatar"]["websocket_url"]
 
 # ── Runtime state ─────────────────────────────────────────────────────────────
 _avatar_ws        = None

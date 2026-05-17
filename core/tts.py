@@ -16,13 +16,10 @@ import numpy as np
 import sounddevice as sd
 
 # ── Path constants ────────────────────────────────────────────────────────────
-# Derived at import time from this file's location (core/ → project root).
-_core_dir    = os.path.dirname(os.path.abspath(__file__))
-_project_root = os.path.join(_core_dir, '..')
-
-PIPER_EXE    = os.path.join(_project_root, "piper", "piper.exe")
-PIPER_MODEL  = os.path.join(_project_root, "piper", "voices", "en_US-lessac-medium.onnx")
-PIPER_CONFIG = os.path.join(_project_root, "piper", "voices", "en_US-lessac-medium.onnx.json")
+from core.config_loader import CFG
+PIPER_EXE    = CFG["tts"]["piper_exe_abs"]
+PIPER_MODEL  = CFG["tts"]["piper_model_abs"]
+PIPER_CONFIG = CFG["tts"]["piper_config_abs"]
 
 # ── Shared state ──────────────────────────────────────────────────────────────
 tts_queue     = queue.Queue()

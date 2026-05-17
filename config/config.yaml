@@ -1,0 +1,53 @@
+# config/config.yaml
+# Single source of truth for all Pocket settings.
+# Machine-specific paths and secrets go in .env — not here.
+# This file is committed to git. Never put API keys or passwords here.
+
+llm:
+  model: "llama3.1"
+  host: "http://localhost:11434"   # override with OLLAMA_HOST in .env
+
+memory:
+  collection_name: "personal_memory"
+  n_results: 6
+  knowledge_files:
+    - "pocket_project_notes.md"
+    - "pocket_master_roadmap.md"
+    - "about-me.md"
+
+stt:
+  whisper_model: "base"
+  sample_rate: 16000
+  channels: 1
+  silence_threshold: 0.01
+  silence_duration: 1.5
+  max_record_secs: 30
+
+tts:
+  samplerate: 22050
+  typing_chars_per_sec: 40
+  # Piper paths — override with PIPER_EXE / PIPER_MODEL in .env if non-standard
+  piper_exe: "piper/piper.exe"
+  piper_model: "piper/voices/en_US-lessac-medium.onnx"
+  piper_config: "piper/voices/en_US-lessac-medium.onnx.json"
+
+avatar:
+  websocket_port: 7845
+  websocket_url: "ws://localhost:7845"
+  max_subtitle_len: 120
+
+security:
+  # Paths /read is NOT allowed to access (relative to project root)
+  read_denylist:
+    - ".env"
+    - ".env.local"
+    - "chroma_data/"
+    - "pocket_backups/"
+  # Commands the executor will never run regardless of approval
+  executor_denylist:
+    - "rm -rf"
+    - "format"
+    - "shutdown"
+    - "diskpart"
+    - "reg delete"
+    - "del /f"

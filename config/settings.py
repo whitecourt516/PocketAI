@@ -1,29 +1,24 @@
 # config/settings.py
+# Backwards-compatibility shim.
+# All values now live in config/config.yaml and are loaded via core/config_loader.
+# Modules should migrate to: from core.config_loader import CFG
+# This shim keeps existing imports working during the transition.
 
-# LLM
-MODEL = "llama3.1"
+from core.config_loader import CFG
 
-# Memory
-COLLECTION_NAME = "personal_memory"
-N_MEMORIES      = 6
+MODEL        = CFG["llm"]["model"]
 
-# Knowledge files to seed on first run (relative to project root)
-KNOWLEDGE_FILES = [
-    "pocket_project_notes.md",
-    "pocket_master_roadmap.md",
-    "about-me.md",
-]
+COLLECTION_NAME = CFG["memory"]["collection_name"]
+N_MEMORIES      = CFG["memory"]["n_results"]
+KNOWLEDGE_FILES = CFG["memory"]["knowledge_files"]
 
-# Audio / STT
-WHISPER_MODEL     = "base"
-SAMPLE_RATE       = 16000
-CHANNELS          = 1
-SILENCE_THRESHOLD = 0.01
-SILENCE_DURATION  = 1.5
-MAX_RECORD_SECS   = 30
+WHISPER_MODEL     = CFG["stt"]["whisper_model"]
+SAMPLE_RATE       = CFG["stt"]["sample_rate"]
+CHANNELS          = CFG["stt"]["channels"]
+SILENCE_THRESHOLD = CFG["stt"]["silence_threshold"]
+SILENCE_DURATION  = CFG["stt"]["silence_duration"]
+MAX_RECORD_SECS   = CFG["stt"]["max_record_secs"]
 
-# TTS
-TYPING_CHARS_PER_SEC = 40
+TYPING_CHARS_PER_SEC = CFG["tts"]["typing_chars_per_sec"]
 
-# WebSocket
-WEBSOCKET_PORT = 7845
+WEBSOCKET_PORT = CFG["avatar"]["websocket_port"]
