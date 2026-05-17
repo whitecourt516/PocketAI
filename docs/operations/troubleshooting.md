@@ -202,6 +202,26 @@ npm start
 - Verify frontend/backend communication
 
 ---
+## Import / Module Errors
+
+### Symptoms
+- `ModuleNotFoundError` on startup
+- `ImportError` for core.* modules
+- Pocket starts but subsystems silent
+
+### Checks
+- Verify file exists at expected path (core/tts.py, core/stt.py, etc.)
+- Verify you're running from project root: `cd C:\Users\white\PocketAI`
+- Check `__pycache__` isn't stale — delete and rerun
+
+### Fixes
+- Confirm all core/ and config/ files are present
+- Re-run from correct directory
+- Run smoke test to isolate which module is broken:
+  `python tests/smoke_test.py`
+
+
+---
 
 ## Expression Engine Failure
 
@@ -281,6 +301,7 @@ After major fixes verify:
 - WebSocket connected
 - Memory retrieval functioning
 - No critical console errors
+- Smoke test passing: 'python tests/smoke_test.py'
 
 ---
 
