@@ -78,8 +78,11 @@ from core.websocket_server import (
     avatar_thinking,
     avatar_done_thinking,
 )
+from core.llm import (
+    session_history,
+    handle_user_input_sync,
+)
 import chromadb
-import ollama
 
 # ── Optional imports ──────────────────────────────────────────────────────────
 try:
@@ -97,10 +100,7 @@ except ImportError:
 CHROMA_PATH  = os.path.join(project_root, "chroma_data")
 MAX_SUBTITLE_LEN = 120
 
-# ── Runtime clients ───────────────────────────────────────────────────────────
-ollama_client = ollama.Client(host=os.getenv("OLLAMA_HOST", "http://localhost:11434"))
 # ── Runtime state ─────────────────────────────────────────────────────────────
-session_history = []
 ws_clients      = set()
 
 # ── Expression engine ─────────────────────────────────────────────────────────
@@ -191,42 +191,6 @@ def send_to_avatar(response_text: str):
 
     avatar_done_thinking()
 
-# ═════════════════════════════════════════════════════════════════════════════
-# LLM — Ollama chat
-# ═════════════════════════════════════════════════════════════════════════════
-
-def handle_user_input_sync(text: str):
-    """Process user input, get LLM reply, update memory and avatar."""
-    global session_history
-
-    avatar_thinking()
-
-    past        = get_relevant_memories(text)
-    full_system = SYSTEM_PROMPT + (f"\n\n{past}" if past else "")
-
-    messages = [{"role": "system", "content": full_system}]
-    messages += session_history
-    messages.append({"role": "user", "content": text})
-
-    try:
-        response = ollama_client.chat(model=MODEL, messages=messages)
-        reply    = response["message"]["content"]
-    except Exception as e:
-        reply = f"[LLM error: {e}]"
-        print(reply)
-        avatar_done_thinking()
-        return
-
-    session_history.append({"role": "user",      "content": text})
-    session_history.append({"role": "assistant",  "content": reply})
-
-    save_memory("user",      text)
-    save_memory("assistant", reply)
-
-    print(f"\nPocket: {reply}\n")
-
-    send_to_avatar(reply)
-    tts_queue.put(reply)
 
 # ═════════════════════════════════════════════════════════════════════════════
 # CLI — text input loop
