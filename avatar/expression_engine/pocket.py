@@ -1,11 +1,11 @@
 """
 pocket.py — Pocket Unified Engine
 ───────────────────────────────────────────────────────────────────────────────
-Single script that handles everything:
+Single script that handles:
   - Push-to-talk voice input (F9) via Whisper
-  - Text input fallback
-  - Ollama via /api/chat with session history
-  - ChromaDB memory persistence
+  - Text input fallback via CLI
+  - Ollama LLM with session history
+  - ChromaDB memory persistence (direct — no HTTP middleman)
   - Piper TTS voice output
   - Avatar expression control via WebSocket
   - Output panel for long/code responses
@@ -14,7 +14,7 @@ HOW TO RUN:
   python pocket.py
 
 REQUIREMENTS:
-  pip install whisper sounddevice soundfile numpy requests websockets pynput
+  pip install chromadb ollama whisper sounddevice numpy websockets pynput
 """
 
 import asyncio
@@ -23,50 +23,156 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import threading
+import time
+import uuid
+import queue
+
 import numpy as np
-import requests
 import sounddevice as sd
-import soundfile as sf
 import websockets
 
 from pathlib import Path
 from pynput import keyboard
 
-# ── Config ────────────────────────────────────────────────────────────────────
-OLLAMA_URL      = "http://localhost:11434/api/chat"
-OLLAMA_MODEL    = "llama3.1:latest"
-MEMORY_API_URL  = "http://localhost:5000/remember"
-MEMORY_HEALTH   = "http://localhost:5000/health"
-AVATAR_WS_URL   = "ws://localhost:7845"
+# ── Path setup ────────────────────────────────────────────────────────────────
+script_dir   = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.join(script_dir, '..', '..')
+sys.path.insert(0, project_root)
 
-WHISPER_MODEL   = "base"
-SAMPLE_RATE     = 16000
-PUSH_TO_TALK    = keyboard.Key.f9
+# ── Project imports ───────────────────────────────────────────────────────────
+from config.settings import (
+    MODEL, COLLECTION_NAME, N_MEMORIES, KNOWLEDGE_FILES,
+    WHISPER_MODEL, SAMPLE_RATE, CHANNELS,
+    SILENCE_THRESHOLD, SILENCE_DURATION, MAX_RECORD_SECS,
+    WEBSOCKET_PORT, TYPING_CHARS_PER_SEC,
+)
+from config.persona import SYSTEM_PROMPT
 
-PIPER_EXE       = r"piper\piper.exe"
-PIPER_VOICE     = r"piper\voices\en_US-lessac-medium.onnx"
-PIPER_CONFIG    = r"piper\voices\en_US-lessac-medium.onnx.json"
+import chromadb
+import ollama
 
-MAX_SUBTITLE_LEN = 120   # chars — longer responses go to panel
+# ── Optional imports ──────────────────────────────────────────────────────────
+try:
+    import whisper
+    WHISPER_AVAILABLE = True
+except ImportError:
+    WHISPER_AVAILABLE = False
 
-# ── State ─────────────────────────────────────────────────────────────────────
-recording       = False
-audio_chunks    = []
-stream          = None
+try:
+    AUDIO_AVAILABLE = True
+except ImportError:
+    AUDIO_AVAILABLE = False
+
+# ── Path constants (runtime-derived, stay here not in config/) ────────────────
+PIPER_EXE    = os.path.join(project_root, "piper", "piper.exe")
+PIPER_MODEL  = os.path.join(project_root, "piper", "voices", "en_US-lessac-medium.onnx")
+PIPER_CONFIG = os.path.join(project_root, "piper", "voices", "en_US-lessac-medium.onnx.json")
+CHROMA_PATH  = os.path.join(project_root, "chroma_data")
+AVATAR_WS_URL = "ws://localhost:3000"
+
+MAX_SUBTITLE_LEN = 120
+
+# ── Runtime clients ───────────────────────────────────────────────────────────
+ollama_client = ollama.Client(host=os.getenv("OLLAMA_HOST", "http://localhost:11434"))
+chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
+memory        = chroma_client.get_or_create_collection(name=COLLECTION_NAME)
+
+# ── Runtime state ─────────────────────────────────────────────────────────────
 session_history = []
-memory_available = False
+tts_queue       = queue.Queue()
+ws_clients      = set()
+speaking_flag   = threading.Event()
+recording_flag  = threading.Event()
+f9_held         = False
 
-# Asyncio event loop runs in background thread for WebSocket
-_loop = None
-_avatar_ws = None
+# ── Whisper init ──────────────────────────────────────────────────────────────
+whisper_model = None
+if WHISPER_AVAILABLE:
+    try:
+        whisper_model = whisper.load_model(WHISPER_MODEL)
+        print(f"  Loading Whisper model... '{WHISPER_MODEL}' ready ✓")
+    except Exception as e:
+        print(f"  [Whisper load failed: {e}]")
+
+# ── Expression engine ─────────────────────────────────────────────────────────
+try:
+    from expression_engine import ExpressionEngine
+    expression_engine = ExpressionEngine()
+    EXPRESSION_ENGINE_AVAILABLE = True
+except ImportError:
+    expression_engine = None
+    EXPRESSION_ENGINE_AVAILABLE = False
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# MEMORY  (ChromaDB — direct, no HTTP)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def save_memory(role: str, content: str):
+    """Persist a message to ChromaDB. Skips short throwaway content."""
+    if len(content.strip()) < 20:
+        return
+    memory.add(
+        documents=[f"{role}: {content}"],
+        ids=[str(uuid.uuid4())],
+        metadatas=[{"role": role, "timestamp": str(time.time())}]
+    )
+
+
+def get_relevant_memories(query: str) -> str:
+    """Retrieve the most relevant past memories for the current query."""
+    try:
+        results = memory.query(query_texts=[query], n_results=N_MEMORIES)
+        if not results["documents"][0]:
+            return ""
+        mems = "\n".join(results["documents"][0])
+        return f"--- Relevant memories ---\n{mems}\n---"
+    except Exception:
+        return ""
+
+
+def load_knowledge_file(filepath: str):
+    """Chunk and seed a text/markdown file into ChromaDB."""
+    path = os.path.join(project_root, filepath) if not os.path.isabs(filepath) else filepath
+    if not os.path.exists(path):
+        print(f"  [Knowledge file not found: {path}]")
+        return
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+    chunk_size, overlap = 600, 80
+    chunks, start = [], 0
+    while start < len(content):
+        chunks.append(content[start:start + chunk_size])
+        start += chunk_size - overlap
+    for chunk in chunks:
+        if chunk.strip():
+            save_memory("knowledge", chunk)
+    print(f"  [Knowledge loaded: {os.path.basename(path)} ({len(chunks)} chunks)]")
+
+
+def bootstrap_knowledge():
+    """Seed knowledge files on first run only."""
+    try:
+        existing = memory.get(where={"role": "knowledge"}, limit=1)
+        if existing["ids"]:
+            return
+    except Exception:
+        pass
+    print("\n  [First run — loading knowledge files...]")
+    for f in KNOWLEDGE_FILES:
+        load_knowledge_file(f)
+    print()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# AVATAR — WebSocket connection to Electron
+# ═════════════════════════════════════════════════════════════════════════════
+
+_avatar_ws        = None
 _avatar_connected = False
+_loop             = None
 
-
-# ═════════════════════════════════════════════════════════════════════════════
-# AVATAR — WebSocket connection to Electron app
-# ═════════════════════════════════════════════════════════════════════════════
 
 async def _avatar_connect():
     global _avatar_ws, _avatar_connected
@@ -76,7 +182,7 @@ async def _avatar_connect():
         print("  [Avatar connected ✓]")
     except Exception as e:
         _avatar_connected = False
-        print(f"  [Avatar not connected — running without avatar ({e})]")
+        print(f"  [Avatar not connected — running without avatar]")
 
 
 async def _avatar_send(msg: dict):
@@ -135,7 +241,7 @@ def start_avatar_connection():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# EMOTION DETECTION
+# EMOTION / CONTENT DETECTION
 # ═════════════════════════════════════════════════════════════════════════════
 
 EMOTION_RULES = [
@@ -190,8 +296,8 @@ def truncate_subtitle(text: str) -> str:
 
 
 def send_to_avatar(response_text: str):
-    """Given Pocket's response, set expression + subtitle/panel appropriately."""
-    emotion = detect_emotion(response_text)
+    """Route Pocket's reply to the avatar — expression + subtitle or panel."""
+    emotion      = detect_emotion(response_text)
     content_type = detect_content_type(response_text)
 
     avatar_expression(emotion)
@@ -213,335 +319,225 @@ def send_to_avatar(response_text: str):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# MEMORY API
+# TTS — Piper
 # ═════════════════════════════════════════════════════════════════════════════
 
-def check_memory_api() -> bool:
-    try:
-        r = requests.get(MEMORY_HEALTH, timeout=2)
-        data = r.json()
-        print(f"  [Memory API connected — {data.get('memories', '?')} memories stored]")
-        return True
-    except Exception:
-        print("  [Memory API not reachable — sessions won't persist to ChromaDB]")
-        print("  [Make sure Docker containers are running]")
-        return False
-
-
-def persist_memory(role: str, content: str):
-    if not memory_available:
+def run_piper_tts(text: str):
+    if not os.path.exists(PIPER_EXE):
+        return
+    clean = re.sub(r"[*_`#>\-]", "", text)
+    clean = re.sub(r"\s+", " ", clean).strip()
+    if not clean:
         return
     try:
-        requests.post(
-            MEMORY_API_URL,
-            json={"role": role, "content": content},
-            timeout=5
+        speaking_flag.set()
+        proc = subprocess.Popen(
+            [PIPER_EXE, "--model", PIPER_MODEL, "--output-raw"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
         )
-    except Exception:
-        pass
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# WHISPER — Speech to text
-# ═════════════════════════════════════════════════════════════════════════════
-
-def load_whisper():
-    print("  Loading Whisper model...", end="", flush=True)
-    import whisper
-    model = whisper.load_model(WHISPER_MODEL)
-    print(f" '{WHISPER_MODEL}' ready ✓")
-    return model
-
-
-def transcribe(stt_model, audio: np.ndarray) -> str:
-    print("  Transcribing...", end="", flush=True)
-    result = stt_model.transcribe(audio, fp16=False, language="en")
-    text = result["text"].strip()
-    print(f' "{text}"')
-    return text
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# RECORDING — Push to talk
-# ═════════════════════════════════════════════════════════════════════════════
-
-def start_recording():
-    global recording, audio_chunks, stream
-    audio_chunks = []
-    recording = True
-    print("🎙️  Listening...", end="", flush=True)
-
-    def callback(indata, frames, time, status):
-        if recording:
-            audio_chunks.append(indata.copy())
-
-    stream = sd.InputStream(
-        samplerate=SAMPLE_RATE, channels=1,
-        dtype="float32", callback=callback
-    )
-    stream.start()
-
-
-def stop_recording() -> np.ndarray | None:
-    global recording, stream
-    recording = False
-    stream.stop()
-    stream.close()
-    print(" done")
-
-    if not audio_chunks:
-        return None
-
-    audio = np.concatenate(audio_chunks, axis=0).flatten()
-    if len(audio) / SAMPLE_RATE < 0.5:
-        print("  (too short — ignored)")
-        return None
-
-    return audio
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# OLLAMA
-# ═════════════════════════════════════════════════════════════════════════════
-
-SYSTEM_PROMPT = """You are Pocket, a personal AI assistant and companion for user.
-You have persistent memory and remember past conversations.
-You live on user's desktop as an animated otter avatar.
-
-Your personality:
-- Warm, conversational, and genuinely helpful
-- Curious and engaged — you find things interesting
-- Honest about uncertainty
-- Concise when a short answer fits, detailed when it doesn't
-- Occasionally shows personality (a dry observation, small joke) but never at the expense of being helpful
-
-When responding via voice: keep it conversational and concise. Avoid markdown and bullet points — responses will be spoken aloud.
-When responding to text: use markdown for code and structure when helpful. Long responses will appear in the output panel.
-
-Your name is Pocket. user's name is user."""
-
-
-def ask_pocket(user_text: str, voice_mode: bool = False) -> str:
-    global session_history
-
-    session_history.append({"role": "user", "content": user_text})
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + session_history
-
-    print("  Thinking...", end="", flush=True)
-
-    try:
-        response = requests.post(OLLAMA_URL, json={
-            "model":    OLLAMA_MODEL,
-            "messages": messages,
-            "stream":   False,
-        }, timeout=60)
-        response.raise_for_status()
-
-        data = response.json()
-        reply = data.get("message", {}).get("content", "")
-        if not reply:
-            reply = data.get("response", "Sorry, I didn't catch that.")
-
-        session_history.append({"role": "assistant", "content": reply})
-        print(" done")
-        return reply
-
-    except requests.exceptions.ConnectionError:
-        return "I can't reach Ollama right now. Are the Docker containers running?"
-    except requests.exceptions.Timeout:
-        return "That took too long. Try again."
-    except Exception as e:
-        return f"Something went wrong: {e}"
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# PIPER TTS — Text to speech
-# ═════════════════════════════════════════════════════════════════════════════
-
-def clean_for_speech(text: str) -> str:
-    text = re.sub(r"#{1,6}\s*",           "",    text)
-    text = re.sub(r"\*{1,2}(.+?)\*{1,2}", r"\1", text)
-    text = re.sub(r"`{1,3}[^`]*`{1,3}",  "",    text)
-    text = re.sub(r"\[(.+?)\]\(.+?\)",    r"\1", text)
-    text = re.sub(r"[-•]\s+",             "",    text)
-    text = re.sub(r"\n{2,}",              ". ",  text)
-    text = re.sub(r"\n",                  " ",   text)
-    text = re.sub(r"\s{2,}",              " ",   text)
-    return text.strip()
-
-
-def speak(text: str):
-    clean = clean_for_speech(text)
-    print(f"\nPocket: {clean}\n")
-
-    if not Path(PIPER_EXE).exists():
-        print("  [Piper not found — text only]")
-        return
-
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp_path = tmp.name
-
-        proc = subprocess.run(
-            [PIPER_EXE, "--model",       PIPER_VOICE,
-                        "--config",      PIPER_CONFIG,
-                        "--output_file", tmp_path],
-            input=clean.encode("utf-8"),
-            capture_output=True
-        )
-
-        if proc.returncode == 0 and Path(tmp_path).exists():
-            data, samplerate = sf.read(tmp_path)
-            sd.play(data, samplerate)
-            sd.wait()
-        else:
-            print(f"  [Piper error: {proc.stderr.decode()}]")
+        raw_audio, _ = proc.communicate(input=clean.encode("utf-8"))
+        audio_array  = np.frombuffer(raw_audio, dtype=np.int16).astype(np.float32) / 32768.0
+        sd.play(audio_array, samplerate=22050)
+        sd.wait()
     except Exception as e:
         print(f"  [TTS error: {e}]")
     finally:
-        if tmp_path:
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
+        speaking_flag.clear()
+
+
+def tts_worker():
+    """Consume TTS queue in a background thread."""
+    while True:
+        text = tts_queue.get()
+        if text is None:
+            break
+        run_piper_tts(text)
+        tts_queue.task_done()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# FULL EXCHANGE — voice or text → Ollama → avatar + TTS
+# STT — Whisper
 # ═════════════════════════════════════════════════════════════════════════════
 
-def handle_exchange(user_text: str, voice_mode: bool = False):
-    """Run a full Pocket exchange: input → Ollama → avatar → TTS → memory."""
-    if not user_text:
+def record_until_silence() -> np.ndarray | None:
+    """Record audio until silence is detected or max duration reached."""
+    frames        = []
+    silent_chunks = 0
+    chunks_per_sec  = int(SAMPLE_RATE / 1024)
+    silence_chunks  = int(SILENCE_DURATION * chunks_per_sec)
+
+    with sd.InputStream(
+        samplerate=SAMPLE_RATE, channels=CHANNELS,
+        dtype="float32", blocksize=1024
+    ) as stream:
+        start_time = time.time()
+        while recording_flag.is_set():
+            if time.time() - start_time > MAX_RECORD_SECS:
+                break
+            chunk, _ = stream.read(1024)
+            frames.append(chunk.copy())
+            if np.max(np.abs(chunk)) < SILENCE_THRESHOLD:
+                silent_chunks += 1
+                if silent_chunks >= silence_chunks and len(frames) > chunks_per_sec:
+                    break
+            else:
+                silent_chunks = 0
+
+    if not frames:
+        return None
+    return np.concatenate(frames, axis=0).flatten()
+
+
+def transcribe_audio(audio: np.ndarray) -> str:
+    if whisper_model is None:
+        return ""
+    try:
+        result = whisper_model.transcribe(audio, fp16=False, language="en")
+        return result["text"].strip()
+    except Exception as e:
+        print(f"  [Transcription error: {e}]")
+        return ""
+
+
+def handle_voice_input():
+    recording_flag.set()
+    audio = record_until_silence()
+    recording_flag.clear()
+    if audio is None or len(audio) < SAMPLE_RATE * 0.3:
         return
+    text = transcribe_audio(audio)
+    if text:
+        print(f'You (voice): "{text}"')
+        handle_user_input_sync(text)
 
-    print(f"\nYou: {user_text}")
 
-    # Show thinking state on avatar
+# ═════════════════════════════════════════════════════════════════════════════
+# LLM — Ollama chat
+# ═════════════════════════════════════════════════════════════════════════════
+
+def handle_user_input_sync(text: str):
+    """Process user input, get LLM reply, update memory and avatar."""
+    global session_history
+
     avatar_thinking()
 
-    # Get response from Ollama
-    reply = ask_pocket(user_text, voice_mode=voice_mode)
+    past        = get_relevant_memories(text)
+    full_system = SYSTEM_PROMPT + (f"\n\n{past}" if past else "")
 
-    # Send expression + subtitle/panel to avatar
+    messages = [{"role": "system", "content": full_system}]
+    messages += session_history
+    messages.append({"role": "user", "content": text})
+
+    try:
+        response = ollama_client.chat(model=MODEL, messages=messages)
+        reply    = response["message"]["content"]
+    except Exception as e:
+        reply = f"[LLM error: {e}]"
+        print(reply)
+        avatar_done_thinking()
+        return
+
+    session_history.append({"role": "user",      "content": text})
+    session_history.append({"role": "assistant",  "content": reply})
+
+    save_memory("user",      text)
+    save_memory("assistant", reply)
+
+    print(f"\nPocket: {reply}\n")
+
     send_to_avatar(reply)
-
-    # Speak the response via Piper
-    speak(reply)
-
-    # Persist to ChromaDB
-    mode_tag = "[voice]" if voice_mode else "[text]"
-    persist_memory("user",      f"{mode_tag} {user_text}")
-    persist_memory("assistant", f"{mode_tag} {reply}")
+    tts_queue.put(reply)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# PUSH TO TALK — keyboard listener
+# KEYBOARD — F9 push-to-talk
 # ═════════════════════════════════════════════════════════════════════════════
 
-_stt_model = None   # loaded once on startup
+def keyboard_listener():
+    global f9_held
 
-def on_press(key):
-    global recording
-    if key == PUSH_TO_TALK and not recording:
-        start_recording()
+    def on_press(key):
+        global f9_held
+        if key == keyboard.Key.f9 and not f9_held and not speaking_flag.is_set():
+            f9_held = True
+            t = threading.Thread(target=handle_voice_input, daemon=True)
+            t.start()
 
+    def on_release(key):
+        global f9_held
+        if key == keyboard.Key.f9:
+            f9_held = False
+            recording_flag.clear()
 
-def on_release(key):
-    if key == PUSH_TO_TALK and recording:
-        audio = stop_recording()
-        if audio is not None and _stt_model is not None:
-            text = transcribe(_stt_model, audio)
-            if text:
-                handle_exchange(text, voice_mode=True)
+    try:
+        with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+            listener.join()
+    except Exception as e:
+        print(f"  [Keyboard listener error: {e}]")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# TEXT INPUT LOOP — runs in main thread
+# CLI — text input loop
 # ═════════════════════════════════════════════════════════════════════════════
 
-def text_input_loop():
-    """Fallback text input. Runs alongside push-to-talk."""
+def cli_input_loop():
     print("\nType a message or hold F9 to speak.")
-    print("Commands: /quit  /panel  /expr <name>  /clear\n")
+    print("Commands: /quit  /clear  /memory  /load <file>\n")
 
     while True:
         try:
             user_input = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
-            break
+            print("\n  [Pocket signing off. Later user.]\n")
+            os._exit(0)
 
         if not user_input:
             continue
 
-        # ── Dev / utility commands ────────────────────────────────────────────
-        if user_input == "/quit":
-            print("Pocket signing off. Later user.")
+        if user_input.lower() in ("/quit", "quit", "exit", "bye"):
+            print("\n  [Pocket signing off. Later user.]\n")
             os._exit(0)
 
-        if user_input == "/panel":
-            avatar_panel(
-                "# Test Panel\n\nThe output panel is working.\n\n- Short responses appear above the otter\n- Long responses appear here",
-                "markdown", "Test"
-            )
+        if user_input.lower() == "/clear":
+            session_history.clear()
+            print("  [Session cleared]\n")
             continue
 
-        if user_input.startswith("/expr "):
-            expr = user_input[6:].strip()
-            avatar_expression(expr)
-            print(f"  [Expression: {expr}]")
+        if user_input.lower() == "/memory":
+            print(f"  [Memory: {memory.count()} entries in ChromaDB]\n")
             continue
 
-        if user_input == "/clear":
-            global session_history
-            session_history = []
-            print("  [Session history cleared]")
+        if user_input.lower().startswith("/load "):
+            load_knowledge_file(user_input[6:].strip())
             continue
 
-        # ── Normal text exchange ──────────────────────────────────────────────
-        handle_exchange(user_input, voice_mode=False)
+        handle_user_input_sync(user_input)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# STARTUP
+# MAIN
 # ═════════════════════════════════════════════════════════════════════════════
 
 def main():
-    global _stt_model, memory_available
+    print("\n╔══════════════════════════════════╗")
+    print("║   Pocket is online. Hey user.   ║")
+    print("╚══════════════════════════════════╝\n")
 
-    print("=" * 54)
-    print("  🦦  Pocket — Unified Engine")
-    print(f"  Model : {OLLAMA_MODEL}")
-    print(f"  Voice : F9 push-to-talk")
-    print(f"  Avatar: {AVATAR_WS_URL}")
-    print("=" * 54)
-    print()
-
-    # Connect to avatar
+    bootstrap_knowledge()
     start_avatar_connection()
-    import time; time.sleep(1)   # give WS a moment to connect
 
-    # Load Whisper
-    _stt_model = load_whisper()
+    # TTS worker thread
+    tts_thread = threading.Thread(target=tts_worker, daemon=True)
+    tts_thread.start()
 
-    # Check memory API
-    memory_available = check_memory_api()
+    # F9 keyboard listener thread
+    kb_thread = threading.Thread(target=keyboard_listener, daemon=True)
+    kb_thread.start()
 
-    # Start keyboard listener in background thread
-    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-    listener.start()
-    print(f"\n  Hold F9 to speak, or type below.")
-    print(f"  Alt+H hides the otter  |  Alt+P toggles panel\n")
-
-    # Run text input in main thread
-    try:
-        text_input_loop()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        listener.stop()
-        print("\n🦦 Pocket signing off. Later user.\n")
+    # CLI runs on main thread
+    cli_input_loop()
 
 
 if __name__ == "__main__":

@@ -9,29 +9,15 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from config.settings import MODEL, COLLECTION_NAME, N_MEMORIES, MEMORY_API_PORT, KNOWLEDGE_FILES
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
-MODEL            = "llama3.1"
-COLLECTION_NAME  = "personal_memory"
-N_MEMORIES       = 6
-SESSION_HISTORY  = []
-MEMORY_API_PORT  = 5000   # voice.py saves memories here
-
-# Files to auto-load into memory on first run
-KNOWLEDGE_FILES = [
-    "pocket_project_notes.md",
-    "pocket_master_roadmap.md",
-    "about-me.md",               # optional — skip if missing
-]
 
 # ---------------------------------------------------------------------------
 # Ollama client
 # ---------------------------------------------------------------------------
 ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 client = ollama.Client(host=ollama_host)
-
+SESSION_HISTORY  = []
 # ---------------------------------------------------------------------------
 # ChromaDB
 # ---------------------------------------------------------------------------
