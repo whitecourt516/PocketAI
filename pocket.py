@@ -41,7 +41,6 @@ project_root = os.path.join(script_dir, '..', '..')
 sys.path.insert(0, project_root)
 
 # ── Project imports ───────────────────────────────────────────────────────────
-# ── Project imports ───────────────────────────────────────────────────────────
 from config.settings import (
     MODEL, COLLECTION_NAME, N_MEMORIES, KNOWLEDGE_FILES,
     WHISPER_MODEL, SAMPLE_RATE, CHANNELS,
@@ -69,7 +68,16 @@ from core.stt import (
     handle_voice_input,
     keyboard_listener,
 )
-
+from core.websocket_server import (
+    start_avatar_connection,
+    avatar_send,
+    avatar_expression,
+    avatar_subtitle,
+    avatar_panel,
+    avatar_panel_close,
+    avatar_thinking,
+    avatar_done_thinking,
+)
 import chromadb
 import ollama
 
@@ -87,8 +95,6 @@ except ImportError:
 
 # ── Path constants (runtime-derived, stay here not in config/) ────────────────
 CHROMA_PATH  = os.path.join(project_root, "chroma_data")
-AVATAR_WS_URL = "ws://localhost:3000"
-
 MAX_SUBTITLE_LEN = 120
 
 # ── Runtime clients ───────────────────────────────────────────────────────────
@@ -106,78 +112,6 @@ except ImportError:
     expression_engine = None
     EXPRESSION_ENGINE_AVAILABLE = False
 
-# ═════════════════════════════════════════════════════════════════════════════
-# AVATAR — WebSocket connection to Electron
-# ═════════════════════════════════════════════════════════════════════════════
-
-_avatar_ws        = None
-_avatar_connected = False
-_loop             = None
-
-
-async def _avatar_connect():
-    global _avatar_ws, _avatar_connected
-    try:
-        _avatar_ws = await websockets.connect(AVATAR_WS_URL)
-        _avatar_connected = True
-        print("  [Avatar connected ✓]")
-    except Exception as e:
-        _avatar_connected = False
-
-async def _avatar_send(msg: dict):
-    global _avatar_ws, _avatar_connected
-    if not _avatar_connected or not _avatar_ws:
-        return
-    try:
-        await _avatar_ws.send(json.dumps(msg))
-    except Exception:
-        _avatar_connected = False
-
-
-def avatar_send(msg: dict):
-    """Thread-safe fire-and-forget send to avatar."""
-    if _loop and _avatar_connected:
-        asyncio.run_coroutine_threadsafe(_avatar_send(msg), _loop)
-
-
-def avatar_expression(name: str):
-    avatar_send({"type": "expression", "value": name})
-
-
-def avatar_subtitle(text: str, duration: int = 5000):
-    avatar_send({"type": "speech", "text": text, "duration": duration})
-
-
-def avatar_panel(content: str, content_type: str, title: str = "Pocket"):
-    avatar_send({"type": "panel", "content": content,
-                 "contentType": content_type, "title": title})
-
-
-def avatar_panel_close():
-    avatar_send({"type": "panel_close"})
-
-
-def avatar_thinking():
-    avatar_expression("thinking")
-    avatar_send({"type": "wander_pause"})
-
-
-def avatar_done_thinking():
-    avatar_send({"type": "wander_resume"})
-
-
-def _run_loop(loop):
-    asyncio.set_event_loop(loop)
-    loop.run_forever()
-
-
-def start_avatar_connection():
-    global _loop
-    _loop = asyncio.new_event_loop()
-    t = threading.Thread(target=_run_loop, args=(_loop,), daemon=True)
-    t.start()
-    time.sleep(0.5)  # Give the loop a moment to start
-    asyncio.run_coroutine_threadsafe(_avatar_connect(), _loop)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
