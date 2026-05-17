@@ -75,9 +75,6 @@ MAX_SUBTITLE_LEN = 120
 
 # ── Runtime clients ───────────────────────────────────────────────────────────
 ollama_client = ollama.Client(host=os.getenv("OLLAMA_HOST", "http://localhost:11434"))
-chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
-memory        = chroma_client.get_or_create_collection(name=COLLECTION_NAME)
-
 # ── Runtime state ─────────────────────────────────────────────────────────────
 session_history = []
 tts_queue       = queue.Queue()
@@ -108,63 +105,13 @@ except ImportError:
 # ═════════════════════════════════════════════════════════════════════════════
 # MEMORY  (ChromaDB — direct, no HTTP)
 # ═════════════════════════════════════════════════════════════════════════════
-
-def save_memory(role: str, content: str):
-    """Persist a message to ChromaDB. Skips short throwaway content."""
-    if len(content.strip()) < 20:
-        return
-    memory.add(
-        documents=[f"{role}: {content}"],
-        ids=[str(uuid.uuid4())],
-        metadatas=[{"role": role, "timestamp": str(time.time())}]
-    )
-
-
-def get_relevant_memories(query: str) -> str:
-    """Retrieve the most relevant past memories for the current query."""
-    try:
-        results = memory.query(query_texts=[query], n_results=N_MEMORIES)
-        if not results["documents"][0]:
-            return ""
-        mems = "\n".join(results["documents"][0])
-        return f"--- Relevant memories ---\n{mems}\n---"
-    except Exception:
-        return ""
-
-
-def load_knowledge_file(filepath: str):
-    """Chunk and seed a text/markdown file into ChromaDB."""
-    path = os.path.join(project_root, filepath) if not os.path.isabs(filepath) else filepath
-    if not os.path.exists(path):
-        print(f"  [Knowledge file not found: {path}]")
-        return
-    with open(path, "r", encoding="utf-8") as f:
-        content = f.read()
-    chunk_size, overlap = 600, 80
-    chunks, start = [], 0
-    while start < len(content):
-        chunks.append(content[start:start + chunk_size])
-        start += chunk_size - overlap
-    for chunk in chunks:
-        if chunk.strip():
-            save_memory("knowledge", chunk)
-    print(f"  [Knowledge loaded: {os.path.basename(path)} ({len(chunks)} chunks)]")
-
-
-def bootstrap_knowledge():
-    """Seed knowledge files on first run only."""
-    try:
-        existing = memory.get(where={"role": "knowledge"}, limit=1)
-        if existing["ids"]:
-            return
-    except Exception:
-        pass
-    print("\n  [First run — loading knowledge files...]")
-    for f in KNOWLEDGE_FILES:
-        load_knowledge_file(f)
-    print()
-
-
+from core.memory import (
+    memory,
+    save_memory,
+    get_relevant_memories,
+    load_knowledge_file,
+    bootstrap_knowledge,
+)
 # ═════════════════════════════════════════════════════════════════════════════
 # AVATAR — WebSocket connection to Electron
 # ═════════════════════════════════════════════════════════════════════════════
