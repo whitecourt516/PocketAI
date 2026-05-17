@@ -65,9 +65,6 @@ except ImportError:
     AUDIO_AVAILABLE = False
 
 # ── Path constants (runtime-derived, stay here not in config/) ────────────────
-PIPER_EXE    = os.path.join(project_root, "piper", "piper.exe")
-PIPER_MODEL  = os.path.join(project_root, "piper", "voices", "en_US-lessac-medium.onnx")
-PIPER_CONFIG = os.path.join(project_root, "piper", "voices", "en_US-lessac-medium.onnx.json")
 CHROMA_PATH  = os.path.join(project_root, "chroma_data")
 AVATAR_WS_URL = "ws://localhost:3000"
 
@@ -77,9 +74,7 @@ MAX_SUBTITLE_LEN = 120
 ollama_client = ollama.Client(host=os.getenv("OLLAMA_HOST", "http://localhost:11434"))
 # ── Runtime state ─────────────────────────────────────────────────────────────
 session_history = []
-tts_queue       = queue.Queue()
 ws_clients      = set()
-speaking_flag   = threading.Event()
 recording_flag  = threading.Event()
 f9_held         = False
 
@@ -94,7 +89,7 @@ if WHISPER_AVAILABLE:
 
 # ── Expression engine ─────────────────────────────────────────────────────────
 try:
-    from expression_engine import ExpressionEngine
+    from avatar.expression_engine import ExpressionEngine
     expression_engine = ExpressionEngine()
     EXPRESSION_ENGINE_AVAILABLE = True
 except ImportError:
@@ -111,6 +106,12 @@ from core.memory import (
     get_relevant_memories,
     load_knowledge_file,
     bootstrap_knowledge,
+)
+from core.tts import (
+    tts_queue,
+    speaking_flag,
+    run_piper_tts,
+    tts_worker,
 )
 # ═════════════════════════════════════════════════════════════════════════════
 # AVATAR — WebSocket connection to Electron
@@ -262,47 +263,6 @@ def send_to_avatar(response_text: str):
         avatar_panel(response_text, content_type, "Pocket")
 
     avatar_done_thinking()
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# TTS — Piper
-# ═════════════════════════════════════════════════════════════════════════════
-
-def run_piper_tts(text: str):
-    if not os.path.exists(PIPER_EXE):
-        return
-    clean = re.sub(r"[*_`#>\-]", "", text)
-    clean = re.sub(r"\s+", " ", clean).strip()
-    if not clean:
-        return
-    try:
-        speaking_flag.set()
-        proc = subprocess.Popen(
-            [PIPER_EXE, "--model", PIPER_MODEL, "--output-raw"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-        )
-        raw_audio, _ = proc.communicate(input=clean.encode("utf-8"))
-        audio_array  = np.frombuffer(raw_audio, dtype=np.int16).astype(np.float32) / 32768.0
-        sd.play(audio_array, samplerate=22050)
-        sd.wait()
-    except Exception as e:
-        print(f"  [TTS error: {e}]")
-    finally:
-        speaking_flag.clear()
-
-
-def tts_worker():
-    """Consume TTS queue in a background thread."""
-    while True:
-        text = tts_queue.get()
-        if text is None:
-            break
-        run_piper_tts(text)
-        tts_queue.task_done()
-
-
 # ═════════════════════════════════════════════════════════════════════════════
 # STT — Whisper
 # ═════════════════════════════════════════════════════════════════════════════

@@ -43,7 +43,7 @@ REM ── Wait for avatar WebSocket server to come up ────────�
 timeout /t 3 /nobreak > nul
 
 REM ── Start the unified Pocket engine ─────────────────────────────────────
-cd /D "%~dp0avatar\expression_engine"
+cd /D "%~dp0"
 python pocket.py
 
 REM ── Cleanup on exit ──────────────────────────────────────────────────────
