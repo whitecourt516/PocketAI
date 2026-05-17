@@ -37,7 +37,7 @@ from pynput import keyboard
 
 # ── Path setup ────────────────────────────────────────────────────────────────
 script_dir   = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.join(script_dir, '..', '..')
+project_root = script_dir
 sys.path.insert(0, project_root)
 
 # ── Project imports ───────────────────────────────────────────────────────────
@@ -47,7 +47,24 @@ from config.settings import (
     SILENCE_THRESHOLD, SILENCE_DURATION, MAX_RECORD_SECS,
     WEBSOCKET_PORT, TYPING_CHARS_PER_SEC,
 )
-from config.persona import SYSTEM_PROMPT
+
+import json
+
+# ── Load system prompt ───────────────────────────────────────────────────────
+_prompt_path = os.path.join(
+    project_root,
+    "persona",
+    "prompts",
+    "base_system.md"
+)
+
+with open(_prompt_path, "r", encoding="utf-8") as f:
+    SYSTEM_PROMPT = f.read()
+
+_expressions_path = os.path.join(project_root, "config", "expressions.json")
+with open(_expressions_path, "r", encoding="utf-8") as f:
+    _expressions = json.load(f)
+EMOTION_RULES = list(_expressions.items())
 
 from core.memory import (
     memory,
@@ -117,25 +134,6 @@ except ImportError:
 # ═════════════════════════════════════════════════════════════════════════════
 # EMOTION / CONTENT DETECTION
 # ═════════════════════════════════════════════════════════════════════════════
-
-EMOTION_RULES = [
-    ("excited",   ["great news", "excellent", "perfect", "amazing", "fantastic",
-                   "absolutely", "wonderful", "love it", "let's go", "ready"]),
-    ("happy",     ["sure", "happy to", "of course", "glad", "here you go",
-                   "done", "finished", "complete", "success", "worked"]),
-    ("thinking",  ["let me think", "hmm", "considering", "analyzing",
-                   "let me check", "working on", "calculating"]),
-    ("surprised", ["oh", "interesting", "unexpected", "wow", "actually",
-                   "wait", "huh", "that's new"]),
-    ("concerned", ["error", "problem", "issue", "failed", "warning", "careful",
-                   "incorrect", "wrong", "cannot", "unable", "sorry"]),
-    ("sleepy",    ["winding down", "quiet", "slow", "rest", "later", "tired"]),
-    ("smug",      ["as i expected", "told you", "obvious", "clearly",
-                   "naturally", "as predicted"]),
-    ("sad",       ["unfortunately", "sadly", "regret", "can't",
-                   "not possible", "impossible"]),
-]
-
 
 def detect_emotion(text: str) -> str:
     lower = text.lower()

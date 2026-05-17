@@ -10,7 +10,7 @@ import os
 import ollama
 
 from config.settings import MODEL
-from config.persona import SYSTEM_PROMPT
+from persona.prompt_loader import SYSTEM_PROMPT
 from core.memory import get_relevant_memories, save_memory
 from core.websocket_server import avatar_thinking, avatar_done_thinking
 from core.tts import tts_queue
