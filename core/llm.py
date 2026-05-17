@@ -62,7 +62,7 @@ def handle_user_input_sync(text: str):
 
     # Local import breaks the circular dependency:
     # pocket.py → core.llm → (would circle back via send_to_avatar)
-    from pocket import send_to_avatar
+    from core.avatar_router import send_to_avatar
     send_to_avatar(reply)
 
     tts_queue.put(reply)
