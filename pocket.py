@@ -41,6 +41,7 @@ project_root = os.path.join(script_dir, '..', '..')
 sys.path.insert(0, project_root)
 
 # ── Project imports ───────────────────────────────────────────────────────────
+# ── Project imports ───────────────────────────────────────────────────────────
 from config.settings import (
     MODEL, COLLECTION_NAME, N_MEMORIES, KNOWLEDGE_FILES,
     WHISPER_MODEL, SAMPLE_RATE, CHANNELS,
@@ -48,6 +49,26 @@ from config.settings import (
     WEBSOCKET_PORT, TYPING_CHARS_PER_SEC,
 )
 from config.persona import SYSTEM_PROMPT
+
+from core.memory import (
+    memory,
+    save_memory,
+    get_relevant_memories,
+    load_knowledge_file,
+    bootstrap_knowledge,
+)
+from core.tts import (
+    tts_queue,
+    speaking_flag,
+    run_piper_tts,
+    tts_worker,
+)
+from core.stt import (
+    recording_flag,
+    init_whisper,
+    handle_voice_input,
+    keyboard_listener,
+)
 
 import chromadb
 import ollama
@@ -75,17 +96,6 @@ ollama_client = ollama.Client(host=os.getenv("OLLAMA_HOST", "http://localhost:11
 # ── Runtime state ─────────────────────────────────────────────────────────────
 session_history = []
 ws_clients      = set()
-recording_flag  = threading.Event()
-f9_held         = False
-
-# ── Whisper init ──────────────────────────────────────────────────────────────
-whisper_model = None
-if WHISPER_AVAILABLE:
-    try:
-        whisper_model = whisper.load_model(WHISPER_MODEL)
-        print(f"  Loading Whisper model... '{WHISPER_MODEL}' ready ✓")
-    except Exception as e:
-        print(f"  [Whisper load failed: {e}]")
 
 # ── Expression engine ─────────────────────────────────────────────────────────
 try:
@@ -96,23 +106,6 @@ except ImportError:
     expression_engine = None
     EXPRESSION_ENGINE_AVAILABLE = False
 
-
-# ═════════════════════════════════════════════════════════════════════════════
-# MEMORY  (ChromaDB — direct, no HTTP)
-# ═════════════════════════════════════════════════════════════════════════════
-from core.memory import (
-    memory,
-    save_memory,
-    get_relevant_memories,
-    load_knowledge_file,
-    bootstrap_knowledge,
-)
-from core.tts import (
-    tts_queue,
-    speaking_flag,
-    run_piper_tts,
-    tts_worker,
-)
 # ═════════════════════════════════════════════════════════════════════════════
 # AVATAR — WebSocket connection to Electron
 # ═════════════════════════════════════════════════════════════════════════════
@@ -263,61 +256,6 @@ def send_to_avatar(response_text: str):
         avatar_panel(response_text, content_type, "Pocket")
 
     avatar_done_thinking()
-# ═════════════════════════════════════════════════════════════════════════════
-# STT — Whisper
-# ═════════════════════════════════════════════════════════════════════════════
-
-def record_until_silence() -> np.ndarray | None:
-    """Record audio until silence is detected or max duration reached."""
-    frames        = []
-    silent_chunks = 0
-    chunks_per_sec  = int(SAMPLE_RATE / 1024)
-    silence_chunks  = int(SILENCE_DURATION * chunks_per_sec)
-
-    with sd.InputStream(
-        samplerate=SAMPLE_RATE, channels=CHANNELS,
-        dtype="float32", blocksize=1024
-    ) as stream:
-        start_time = time.time()
-        while recording_flag.is_set():
-            if time.time() - start_time > MAX_RECORD_SECS:
-                break
-            chunk, _ = stream.read(1024)
-            frames.append(chunk.copy())
-            if np.max(np.abs(chunk)) < SILENCE_THRESHOLD:
-                silent_chunks += 1
-                if silent_chunks >= silence_chunks and len(frames) > chunks_per_sec:
-                    break
-            else:
-                silent_chunks = 0
-
-    if not frames:
-        return None
-    return np.concatenate(frames, axis=0).flatten()
-
-
-def transcribe_audio(audio: np.ndarray) -> str:
-    if whisper_model is None:
-        return ""
-    try:
-        result = whisper_model.transcribe(audio, fp16=False, language="en")
-        return result["text"].strip()
-    except Exception as e:
-        print(f"  [Transcription error: {e}]")
-        return ""
-
-
-def handle_voice_input():
-    recording_flag.set()
-    audio = record_until_silence()
-    recording_flag.clear()
-    if audio is None or len(audio) < SAMPLE_RATE * 0.3:
-        return
-    text = transcribe_audio(audio)
-    if text:
-        print(f'You (voice): "{text}"')
-        handle_user_input_sync(text)
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # LLM — Ollama chat
@@ -355,34 +293,6 @@ def handle_user_input_sync(text: str):
 
     send_to_avatar(reply)
     tts_queue.put(reply)
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# KEYBOARD — F9 push-to-talk
-# ═════════════════════════════════════════════════════════════════════════════
-
-def keyboard_listener():
-    global f9_held
-
-    def on_press(key):
-        global f9_held
-        if key == keyboard.Key.f9 and not f9_held and not speaking_flag.is_set():
-            f9_held = True
-            t = threading.Thread(target=handle_voice_input, daemon=True)
-            t.start()
-
-    def on_release(key):
-        global f9_held
-        if key == keyboard.Key.f9:
-            f9_held = False
-            recording_flag.clear()
-
-    try:
-        with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
-            listener.join()
-    except Exception as e:
-        print(f"  [Keyboard listener error: {e}]")
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # CLI — text input loop
@@ -432,6 +342,7 @@ def main():
     print("╚══════════════════════════════════╝\n")
 
     bootstrap_knowledge()
+    init_whisper()
     start_avatar_connection()
 
     # TTS worker thread
@@ -439,7 +350,9 @@ def main():
     tts_thread.start()
 
     # F9 keyboard listener thread
-    kb_thread = threading.Thread(target=keyboard_listener, daemon=True)
+    kb_thread = threading.Thread(
+        target=keyboard_listener, args=(handle_user_input_sync,), daemon=True
+    )
     kb_thread.start()
 
     # CLI runs on main thread
