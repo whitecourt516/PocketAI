@@ -182,8 +182,6 @@ async def _avatar_connect():
         print("  [Avatar connected ✓]")
     except Exception as e:
         _avatar_connected = False
-        print(f"  [Avatar not connected — running without avatar]")
-
 
 async def _avatar_send(msg: dict):
     global _avatar_ws, _avatar_connected
@@ -237,6 +235,7 @@ def start_avatar_connection():
     _loop = asyncio.new_event_loop()
     t = threading.Thread(target=_run_loop, args=(_loop,), daemon=True)
     t.start()
+    time.sleep(0.5)  # Give the loop a moment to start
     asyncio.run_coroutine_threadsafe(_avatar_connect(), _loop)
 
 
