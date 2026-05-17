@@ -1,0 +1,33 @@
+{
+  "excited": [
+    "great news", "excellent", "perfect", "amazing", "fantastic",
+    "absolutely", "wonderful", "love it", "let's go", "ready"
+  ],
+  "happy": [
+    "sure", "happy to", "of course", "glad", "here you go",
+    "done", "finished", "complete", "success", "worked"
+  ],
+  "thinking": [
+    "let me think", "hmm", "considering", "analyzing",
+    "let me check", "working on", "calculating"
+  ],
+  "surprised": [
+    "oh", "interesting", "unexpected", "wow", "actually",
+    "wait", "huh", "that's new"
+  ],
+  "concerned": [
+    "error", "problem", "issue", "failed", "warning", "careful",
+    "incorrect", "wrong", "cannot", "unable", "sorry"
+  ],
+  "sleepy": [
+    "winding down", "quiet", "slow", "rest", "later", "tired"
+  ],
+  "smug": [
+    "as i expected", "told you", "obvious", "clearly",
+    "naturally", "as predicted"
+  ],
+  "sad": [
+    "unfortunately", "sadly", "regret", "can't",
+    "not possible", "impossible"
+  ]
+}

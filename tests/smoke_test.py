@@ -143,7 +143,7 @@ skipped = sum(1 for r in results if r[0] == SKIP)
 print(f"\n  {passed} passed · {failed} failed · {skipped} skipped")
 
 if failed == 0:
-    print("  All systems nominal.\n")
+    print("  System's are good to go, boss.\n")
 else:
-    print("  Some systems need attention.\n")
+    print("  Shit has hit the fan.\n")
     sys.exit(1)
