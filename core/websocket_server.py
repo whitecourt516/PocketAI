@@ -18,7 +18,7 @@ import time
 
 import websockets
 
-AVATAR_WS_URL = "ws://localhost:3000"
+AVATAR_WS_URL = "ws://localhost:7845"
 
 # ── Runtime state ─────────────────────────────────────────────────────────────
 _avatar_ws        = None
