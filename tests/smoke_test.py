@@ -127,8 +127,26 @@ def test_websocket():
     asyncio.run(_connect())
 
 check("WebSocket connects to Electron avatar", test_websocket)
+
+
+# ── /read command ─────────────────────────────────────────────────────────────
+def test_read_command():
+    from pathlib import Path
+    from core.config_loader import is_read_allowed
+
+    # Allowed file should load
+    allowed = Path(project_root) / "pocket.py"
+    assert allowed.exists(), "pocket.py not found"
+    assert is_read_allowed(str(allowed)), "pocket.py should be allowed"
+    content = allowed.read_text(encoding="utf-8")
+    assert len(content) > 100, "pocket.py content suspiciously short"
+
+    # Denied file should be blocked
+    denied = Path(project_root) / ".env"
+    assert not is_read_allowed(str(denied)), ".env should be blocked"
+
+check("/read loads allowed files + blocks denylist", test_read_command)
 # ── Skipped (not built yet) ───────────────────────────────────────────────────
-skip("/read command", "not built yet — Stage 4f")
 skip("Executor", "not built yet — Stage 4g")
 
 
