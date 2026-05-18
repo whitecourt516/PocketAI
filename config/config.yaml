@@ -51,3 +51,6 @@ security:
     - "diskpart"
     - "reg delete"
     - "del /f"
+executor:
+  timeout_seconds: 15
+  max_output_chars: 4000
