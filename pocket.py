@@ -58,13 +58,17 @@ from core.llm import (
     handle_user_input_sync,
 )
 from core.avatar_router import send_to_avatar
+
+from pathlib import Path
+
+from core.config_loader import is_read_allowed
 # ═════════════════════════════════════════════════════════════════════════════
 # CLI — text input loop
 # ═════════════════════════════════════════════════════════════════════════════
 
 def cli_input_loop():
     print("\nType a message or hold F9 to speak.")
-    print("Commands: /quit  /clear  /memory  /load <file>\n")
+    print("Commands: /quit  /clear  /memory  /load <file>  /read <file>\n")
 
     while True:
         try:
@@ -93,8 +97,25 @@ def cli_input_loop():
             load_knowledge_file(user_input[6:].strip())
             continue
 
-        handle_user_input_sync(user_input)
+        if user_input.lower().startswith("/read "):
+            filepath = user_input[6:].strip()
+            path = Path(filepath) if Path(filepath).is_absolute() else Path(project_root) / filepath
+            if not is_read_allowed(str(path)):
+                print(f"  [/read blocked: {filepath} is on the denylist]\n")
+                continue
+            try:
+                content = path.read_text(encoding="utf-8")
+                print(f"  [Loaded: {path} ({len(content)} chars)]\n")
+                handle_user_input_sync(
+                    f"I'm showing you this file: {filepath}\n\n```\n{content}\n```"
+                )
+            except FileNotFoundError:
+                print(f"  [File not found: {path}]\n")
+            except Exception as e:
+                print(f"  [/read error: {e}]\n")
+            continue
 
+        handle_user_input_sync(user_input)
 
 # ═════════════════════════════════════════════════════════════════════════════
 # MAIN
