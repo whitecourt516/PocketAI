@@ -6,11 +6,16 @@
 #   from core.config_loader import CFG
 #   model = CFG["llm"]["model"]
 #   piper_exe = CFG["tts"]["piper_exe_abs"]   # absolute path, ready to use
+#
+# Stage 4s: ConfigLoader implements PocketModule.
+#   health_check() verifies config loaded and all resolved paths exist.
 
 import os
 import yaml
 from pathlib import Path
 from dotenv import load_dotenv
+
+from core.pocket_module import PocketModule
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 _core_dir     = Path(__file__).parent
@@ -36,8 +41,6 @@ if os.getenv("PIPER_MODEL"):
     CFG["tts"]["piper_model"] = os.getenv("PIPER_MODEL")
 
 # ── Resolve relative paths to absolute ───────────────────────────────────────
-# Piper paths in config.yaml are relative to project root.
-# These _abs variants are ready to pass directly to subprocess / os.path.exists.
 def _abs(relative: str) -> str:
     p = Path(relative)
     return str(p if p.is_absolute() else PROJECT_ROOT / p)
@@ -56,7 +59,7 @@ def is_read_allowed(filepath: str) -> bool:
         denied_abs = (PROJECT_ROOT / denied).resolve()
         try:
             p.relative_to(denied_abs)
-            return False  # filepath is inside a denied path
+            return False
         except ValueError:
             pass
         if p == denied_abs:
@@ -68,3 +71,45 @@ def is_command_allowed(command: str) -> bool:
     """Return False if command contains any executor denylist entry."""
     lower = command.lower()
     return not any(blocked in lower for blocked in CFG["security"]["executor_denylist"])
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# LIFECYCLE — Stage 4s
+# ═════════════════════════════════════════════════════════════════════════════
+
+class ConfigLoader(PocketModule):
+    """Lifecycle wrapper for config_loader.
+
+    Config is loaded at import time (module-level above), so start() has
+    nothing to do. health_check() verifies the CFG dict is populated and
+    the three critical Piper paths actually exist on disk.
+    """
+
+    def start(self) -> None:
+        # Config loads at import time — nothing to do here.
+        pass
+
+    def stop(self) -> None:
+        # No connections or threads to close.
+        pass
+
+    def health_check(self) -> bool:
+        try:
+            if not CFG:
+                return False
+            # Verify the three resolved Piper paths exist
+            for key in ("piper_exe_abs", "piper_model_abs", "piper_config_abs"):
+                if not Path(CFG["tts"][key]).exists():
+                    print(f"  [ConfigLoader] Missing path: {CFG['tts'][key]}")
+                    return False
+            return True
+        except Exception as e:
+            print(f"  [ConfigLoader] health_check error: {e}")
+            return False
+
+    def on_event(self, event: dict) -> None:
+        # Config loader has no event subscriptions.
+        pass
+
+
+config_loader_module = ConfigLoader()

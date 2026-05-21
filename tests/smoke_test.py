@@ -5,7 +5,6 @@
 # Run before and after significant changes:
 #   python tests/smoke_test.py
 #
-# Does NOT test /read or executor — those features aren't built yet.
 # Add entries here as new systems come online.
 
 import os
@@ -77,7 +76,6 @@ def test_chromadb():
     assert result["documents"][0], "No results returned from ChromaDB"
     assert any(test_doc in d for d in result["documents"][0]), "Test doc not retrieved"
 
-    # Clean up
     collection.delete(ids=[test_id])
 
 check("ChromaDB stores and retrieves", test_chromadb)
@@ -104,7 +102,6 @@ def test_piper():
     raw, _ = proc.communicate(input=b"Smoke test.")
     assert len(raw) > 0, "Piper returned empty audio"
 
-    # Play it so we can confirm audibly too
     audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
     sd.play(audio, samplerate=22050)
     sd.wait()
@@ -134,28 +131,180 @@ def test_read_command():
     from pathlib import Path
     from core.config_loader import is_read_allowed
 
-    # Allowed file should load
     allowed = Path(project_root) / "pocket.py"
     assert allowed.exists(), "pocket.py not found"
     assert is_read_allowed(str(allowed)), "pocket.py should be allowed"
     content = allowed.read_text(encoding="utf-8")
     assert len(content) > 100, "pocket.py content suspiciously short"
 
-    # Denied file should be blocked
     denied = Path(project_root) / ".env"
     assert not is_read_allowed(str(denied)), ".env should be blocked"
 
 check("/read loads allowed files + blocks denylist", test_read_command)
-# ── Skipped (not built yet) ───────────────────────────────────────────────────
-skip("Executor", "not built yet — Stage 4g")
+
+
+# ── Executor ──────────────────────────────────────────────────────────────────
+skip("Executor", "requires interactive approval — tested manually")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# STAGE 4s — MODULE LIFECYCLE CONTRACT
+# ═════════════════════════════════════════════════════════════════════════════
+
+print("\n  Stage 4s — Lifecycle contract...\n")
+
+
+# ── ABC enforcement ───────────────────────────────────────────────────────────
+def test_abc_enforcement():
+    from core.pocket_module import PocketModule
+
+    # A class missing any of the four methods must not be instantiable
+    class Incomplete(PocketModule):
+        def start(self): pass
+        def stop(self): pass
+        # health_check and on_event intentionally missing
+
+    try:
+        Incomplete()
+        raise AssertionError("TypeError not raised — ABC not enforcing contract")
+    except TypeError:
+        pass  # correct
+
+check("ABC rejects incomplete module", test_abc_enforcement)
+
+
+# ── All module instances exist ────────────────────────────────────────────────
+def test_module_instances():
+    from core.pocket_module      import PocketModule
+    from core.config_loader      import config_loader_module
+    from core.backup_manager     import backup_manager_module
+    from core.permissions        import permissions_module
+    from core.avatar_router      import avatar_router_module
+    from core.executor           import executor_module
+
+    for mod in [
+        config_loader_module,
+        backup_manager_module,
+        permissions_module,
+        avatar_router_module,
+        executor_module,
+    ]:
+        assert isinstance(mod, PocketModule), f"{mod} is not a PocketModule"
+
+check("All stateless module instances are PocketModule", test_module_instances)
+
+
+# ── Stateless health checks ───────────────────────────────────────────────────
+# These modules have no service dependencies — safe to check any time.
+
+def test_health_config_loader():
+    from core.config_loader import config_loader_module
+    assert config_loader_module.health_check(), "config_loader health_check failed"
+
+check("config_loader health_check", test_health_config_loader)
+
+
+def test_health_backup_manager():
+    from core.backup_manager import backup_manager_module
+    backup_manager_module.start()  # ensures backup dir exists
+    assert backup_manager_module.health_check(), "backup_manager health_check failed"
+
+check("backup_manager health_check", test_health_backup_manager)
+
+
+def test_health_permissions():
+    from core.permissions import permissions_module
+    permissions_module.start()  # ensures logs/ dir exists
+    assert permissions_module.health_check(), "permissions health_check failed"
+
+check("permissions health_check", test_health_permissions)
+
+
+def test_health_avatar_router():
+    from core.avatar_router import avatar_router_module
+    assert avatar_router_module.health_check(), "avatar_router health_check — expressions.json may not have loaded"
+
+check("avatar_router health_check", test_health_avatar_router)
+
+
+def test_health_executor():
+    from core.executor import executor_module
+    assert executor_module.health_check(), "executor health_check — denylist may be empty in config.yaml"
+
+check("executor health_check", test_health_executor)
+
+
+# ── Service health checks (require running services) ─────────────────────────
+# These call real services. They pass/fail based on what's currently running.
+
+def test_health_memory():
+    from core.memory import memory_module
+    assert memory_module.health_check(), "memory health_check failed — is ChromaDB running?"
+
+check("memory health_check (ChromaDB round-trip)", test_health_memory)
+
+
+def test_health_llm():
+    from core.llm import llm_module
+    assert llm_module.health_check(), "llm health_check failed — is Ollama running?"
+
+check("llm health_check (Ollama ping)", test_health_llm)
+
+
+def test_health_tts():
+    from core.tts import tts_module
+    assert tts_module.health_check(), "tts health_check failed — Piper exe not found"
+
+check("tts health_check (Piper exe exists)", test_health_tts)
+
+
+def test_health_stt():
+    from core.stt import stt_module
+    stt_module.start()  # loads Whisper model
+    assert stt_module.health_check(), "stt health_check failed — Whisper model did not load"
+
+check("stt health_check (Whisper model loads)", test_health_stt)
+
+
+def test_health_websocket():
+    from core.websocket_server import websocket_module
+    websocket_module.start()
+    import time; time.sleep(1)  # give the connection a moment
+    assert websocket_module.health_check(), "websocket health_check failed — is Electron avatar running?"
+
+check("websocket health_check (avatar connected)", test_health_websocket)
+
+
+# ── on_event ignores unknown events ──────────────────────────────────────────
+def test_on_event_safety():
+    from core.config_loader  import config_loader_module
+    from core.backup_manager import backup_manager_module
+    from core.permissions    import permissions_module
+    from core.avatar_router  import avatar_router_module
+    from core.executor       import executor_module
+    from core.memory         import memory_module
+    from core.llm            import llm_module
+    from core.tts            import tts_module
+    from core.stt            import stt_module
+
+    garbage_event = {"type": "totally.unknown.event", "payload": "nonsense"}
+
+    for mod in [
+        config_loader_module, backup_manager_module, permissions_module,
+        avatar_router_module, executor_module, memory_module,
+        llm_module, tts_module, stt_module,
+    ]:
+        mod.on_event(garbage_event)  # must not raise
+
+check("on_event silently ignores unknown events (all modules)", test_on_event_safety)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 # SUMMARY
 # ═════════════════════════════════════════════════════════════════════════════
 
-passed = sum(1 for r in results if r[0] == PASS)
-failed = sum(1 for r in results if r[0] == FAIL)
+passed  = sum(1 for r in results if r[0] == PASS)
+failed  = sum(1 for r in results if r[0] == FAIL)
 skipped = sum(1 for r in results if r[0] == SKIP)
 
 print(f"\n  {passed} passed · {failed} failed · {skipped} skipped")

@@ -8,6 +8,12 @@
 #   transcribe_audio(audio) — transcribe ndarray → str
 #   handle_voice_input(on_input) — full record→transcribe→callback pipeline
 #   keyboard_listener(on_input)  — F9 push-to-talk listener (blocking, run in thread)
+#
+# Stage 4s: STTModule implements PocketModule.
+#   start()        — loads Whisper model + starts F9 keyboard listener thread
+#   stop()         — clears recording_flag so any active recording exits cleanly
+#   health_check() — returns True if Whisper model is loaded
+#   on_event()     — no subscriptions; STT is input-driven, not event-driven
 
 import threading
 import time
@@ -24,6 +30,7 @@ from config.settings import (
     MAX_RECORD_SECS,
 )
 from core.tts import speaking_flag
+from core.pocket_module import PocketModule
 
 # ── Optional Whisper import ───────────────────────────────────────────────────
 try:
@@ -35,6 +42,7 @@ except ImportError:
 # ── Shared state ──────────────────────────────────────────────────────────────
 recording_flag = threading.Event()
 _whisper_model = None
+_keyboard_thread: threading.Thread | None = None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -54,7 +62,7 @@ def init_whisper():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# STT
+# CORE FUNCTIONS (unchanged public API)
 # ═════════════════════════════════════════════════════════════════════════════
 
 def record_until_silence() -> np.ndarray | None:
@@ -99,11 +107,7 @@ def transcribe_audio(audio: np.ndarray) -> str:
 
 
 def handle_voice_input(on_input):
-    """Record → transcribe → call on_input(text).
-
-    *on_input* is a callable (e.g. handle_user_input_sync from pocket.py)
-    passed in to avoid a circular import.
-    """
+    """Record → transcribe → call on_input(text)."""
     recording_flag.set()
     audio = record_until_silence()
     recording_flag.clear()
@@ -115,15 +119,8 @@ def handle_voice_input(on_input):
         on_input(text)
 
 
-# ═════════════════════════════════════════════════════════════════════════════
-# KEYBOARD — F9 push-to-talk
-# ═════════════════════════════════════════════════════════════════════════════
-
 def keyboard_listener(on_input):
-    """Block and listen for F9 push-to-talk. Run in a daemon thread.
-
-    *on_input* is passed through to handle_voice_input.
-    """
+    """Block and listen for F9 push-to-talk. Run in a daemon thread."""
     from pynput import keyboard
 
     f9_held = False
@@ -148,3 +145,42 @@ def keyboard_listener(on_input):
             listener.join()
     except Exception as e:
         print(f"  [Keyboard listener error: {e}]")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# LIFECYCLE — Stage 4s
+# ═════════════════════════════════════════════════════════════════════════════
+
+class STTModule(PocketModule):
+    """Lifecycle wrapper for Whisper STT.
+
+    start()        — loads the Whisper model. The keyboard listener is started
+                     by pocket.py (needs the on_input callback), so it is not
+                     launched here. start() makes the module ready to transcribe.
+    stop()         — clears recording_flag so any in-progress recording exits
+                     at its next silence-detection loop iteration.
+    health_check() — returns True only if the Whisper model is loaded.
+                     Returns False (not raises) if Whisper isn't installed.
+    on_event()     — no subscriptions; STT is push-to-talk / input-driven.
+    """
+
+    def start(self) -> None:
+        init_whisper()
+
+    def stop(self) -> None:
+        # Signal any active recording to stop at its next loop check.
+        recording_flag.clear()
+
+    def health_check(self) -> bool:
+        try:
+            return _whisper_model is not None
+        except Exception as e:
+            print(f"  [STTModule] health_check error: {e}")
+            return False
+
+    def on_event(self, event: dict) -> None:
+        # STT is input-driven (F9 hotkey). No event subscriptions needed.
+        pass
+
+
+stt_module = STTModule()

@@ -6,6 +6,12 @@
 #   speaking_flag  — threading.Event, set while audio is playing
 #   run_piper_tts(text)  — synthesise + play one utterance (blocking)
 #   tts_worker()         — background thread target; drains tts_queue
+#
+# Stage 4s: TTSModule implements PocketModule.
+#   start()        — launches the background tts_worker thread
+#   stop()         — sends None sentinel to drain and exit the worker thread
+#   health_check() — verifies Piper executable exists on disk
+#   on_event()     — handles "tts.speak" events from the bus (4q)
 
 import os
 import re
@@ -15,8 +21,10 @@ import threading
 import numpy as np
 import sounddevice as sd
 
-# ── Path constants ────────────────────────────────────────────────────────────
 from core.config_loader import CFG
+from core.pocket_module import PocketModule
+
+# ── Path constants ────────────────────────────────────────────────────────────
 PIPER_EXE    = CFG["tts"]["piper_exe_abs"]
 PIPER_MODEL  = CFG["tts"]["piper_model_abs"]
 PIPER_CONFIG = CFG["tts"]["piper_config_abs"]
@@ -24,19 +32,20 @@ PIPER_CONFIG = CFG["tts"]["piper_config_abs"]
 # ── Shared state ──────────────────────────────────────────────────────────────
 tts_queue     = queue.Queue()
 speaking_flag = threading.Event()
+_worker_thread: threading.Thread | None = None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# TTS
+# CORE FUNCTIONS (unchanged public API)
 # ═════════════════════════════════════════════════════════════════════════════
 
 def run_piper_tts(text: str):
     """Synthesise *text* with Piper and play it through the default output device.
 
-    Blocks until playback is complete.  Sets/clears *speaking_flag* around
+    Blocks until playback is complete. Sets/clears *speaking_flag* around
     playback so other subsystems can check whether audio is active.
     """
-    import subprocess  # local — only needed when Piper is present
+    import subprocess
 
     if not os.path.exists(PIPER_EXE):
         return
@@ -75,3 +84,48 @@ def tts_worker():
             break
         run_piper_tts(text)
         tts_queue.task_done()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# LIFECYCLE — Stage 4s
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TTSModule(PocketModule):
+    """Lifecycle wrapper for Piper TTS.
+
+    start()        — spins up the tts_worker daemon thread.
+    stop()         — sends the None sentinel; worker drains the queue and exits.
+    health_check() — verifies the Piper executable exists on disk.
+    on_event()     — handles "tts.speak" events so other modules can enqueue
+                     speech without importing this module directly.
+    """
+
+    def start(self) -> None:
+        global _worker_thread
+        _worker_thread = threading.Thread(target=tts_worker, daemon=True, name="tts-worker")
+        _worker_thread.start()
+
+    def stop(self) -> None:
+        # None is the sentinel that tells tts_worker to exit after draining.
+        tts_queue.put(None)
+        if _worker_thread and _worker_thread.is_alive():
+            _worker_thread.join(timeout=5)
+
+    def health_check(self) -> bool:
+        try:
+            return os.path.exists(PIPER_EXE)
+        except Exception as e:
+            print(f"  [TTSModule] health_check error: {e}")
+            return False
+
+    def on_event(self, event: dict) -> None:
+        # Supported event: {"type": "tts.speak", "text": "...", "priority": 1}
+        # Priority is reserved for 4q — currently all speech is FIFO.
+        if event.get("type") != "tts.speak":
+            return
+        text = event.get("text", "")
+        if text:
+            tts_queue.put(text)
+
+
+tts_module = TTSModule()

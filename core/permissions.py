@@ -6,12 +6,14 @@
 #
 # Public API:
 #   propose_action(description, command) -> bool
-#       Show user what Pocket wants to do, wait for y/n.
-#       Returns True if approved, False if rejected or blocked.
-#
 #   log_decision(...)
-#       Append one record to logs/decisions.jsonl.
-#       Called automatically by propose_action — rarely needed directly.
+#   record_outcome(command, outcome)
+#
+# Stage 4s: PermissionsModule implements PocketModule.
+#   start()        — ensures the log directory exists
+#   stop()         — no-op; JSONL log is append-only, nothing to flush
+#   health_check() — verifies the log directory is writable
+#   on_event()     — no subscriptions; permissions are synchronous by design
 
 import json
 import os
@@ -19,6 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 from core.config_loader import CFG, is_read_allowed, is_command_allowed
+from core.pocket_module import PocketModule
 
 # ── Log path ──────────────────────────────────────────────────────────────────
 _core_dir    = Path(__file__).parent
@@ -32,7 +35,7 @@ def _ensure_log_dir():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# DECISION LOG
+# DECISION LOG (unchanged public API)
 # ═════════════════════════════════════════════════════════════════════════════
 
 def log_decision(
@@ -42,16 +45,6 @@ def log_decision(
     blocked_reason: str | None = None,
     outcome: str | None = None,
 ):
-    """Append one decision record to logs/decisions.jsonl.
-
-    Fields:
-      timestamp      — ISO 8601
-      description    — what Pocket said it wanted to do
-      command        — the raw command/path/action string
-      approved       — True if user said y, False if n or auto-blocked
-      blocked_reason — set if auto-blocked by denylist before user saw it
-      outcome        — filled in after execution (success, error message, etc.)
-    """
     _ensure_log_dir()
     record = {
         "timestamp":      datetime.now().isoformat(),
@@ -66,56 +59,29 @@ def log_decision(
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# PERMISSION GATE
+# PERMISSION GATE (unchanged public API)
 # ═════════════════════════════════════════════════════════════════════════════
 
 def propose_action(description: str, command: str) -> bool:
-    """Propose an action to user and wait for approval.
-
-    Flow:
-      1. Auto-block check — denylist (no prompt shown to user)
-      2. Show proposal to user
-      3. Wait for y/n
-      4. Log the decision
-      5. Return True (approved) or False (rejected/blocked)
-
-    Args:
-      description — plain English summary of what Pocket wants to do
-      command     — the exact command, path, or action string
-
-    Returns:
-      True if user approved, False otherwise.
-    """
-    # ── Step 1: auto-block check ──────────────────────────────────────────────
     blocked_reason = None
 
     if not is_command_allowed(command):
         blocked_reason = "command matches executor denylist"
         print(f"\n  [BLOCKED] {blocked_reason}")
         print(f"  Command: {command}\n")
-        log_decision(
-            description=description,
-            command=command,
-            approved=False,
-            blocked_reason=blocked_reason,
-        )
+        log_decision(description=description, command=command,
+                     approved=False, blocked_reason=blocked_reason)
         return False
 
-    # /read path check — only applies when the action looks like a file read
     if description.lower().startswith("read") or "/read" in description.lower():
         if not is_read_allowed(command):
             blocked_reason = "path matches read denylist"
             print(f"\n  [BLOCKED] {blocked_reason}")
             print(f"  Path: {command}\n")
-            log_decision(
-                description=description,
-                command=command,
-                approved=False,
-                blocked_reason=blocked_reason,
-            )
+            log_decision(description=description, command=command,
+                         approved=False, blocked_reason=blocked_reason)
             return False
 
-    # ── Step 2: show proposal ─────────────────────────────────────────────────
     print("\n" + "─" * 50)
     print("  Pocket wants to:")
     print(f"  {description}")
@@ -123,7 +89,6 @@ def propose_action(description: str, command: str) -> bool:
     print(f"  Command: {command}")
     print("─" * 50)
 
-    # ── Step 3: wait for approval ─────────────────────────────────────────────
     try:
         response = input("  Approve? [y/n]: ").strip().lower()
     except (EOFError, KeyboardInterrupt):
@@ -131,14 +96,8 @@ def propose_action(description: str, command: str) -> bool:
 
     approved = response == "y"
 
-    # ── Step 4: log it ────────────────────────────────────────────────────────
-    log_decision(
-        description=description,
-        command=command,
-        approved=approved,
-    )
+    log_decision(description=description, command=command, approved=approved)
 
-    # ── Step 5: confirm to user ──────────────────────────────────────────────
     if approved:
         print("  [Approved]\n")
     else:
@@ -148,12 +107,6 @@ def propose_action(description: str, command: str) -> bool:
 
 
 def record_outcome(command: str, outcome: str):
-    """Update the most recent decision log entry for this command with its outcome.
-
-    Call this after execution completes so the log has the full picture.
-    Appends a follow-up outcome record rather than mutating the original
-    (JSONL is append-only by design).
-    """
     _ensure_log_dir()
     record = {
         "timestamp": datetime.now().isoformat(),
@@ -163,3 +116,45 @@ def record_outcome(command: str, outcome: str):
     }
     with open(DECISION_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# LIFECYCLE — Stage 4s
+# ═════════════════════════════════════════════════════════════════════════════
+
+class PermissionsModule(PocketModule):
+    """Lifecycle wrapper for the permission gate and decision log.
+
+    start()        — creates the logs/ directory if it doesn't exist.
+    stop()         — no-op; JSONL is append-only and closes after every write.
+    health_check() — writes a canary file to logs/ to confirm write access,
+                     then removes it. Returns False if the directory is
+                     missing or the filesystem is read-only.
+    on_event()     — no subscriptions; propose_action() is synchronous and
+                     requires user's direct input — it cannot be async.
+    """
+
+    def start(self) -> None:
+        _ensure_log_dir()
+
+    def stop(self) -> None:
+        pass
+
+    def health_check(self) -> bool:
+        try:
+            _ensure_log_dir()
+            canary = LOG_DIR / ".health_check"
+            canary.write_text("ok")
+            canary.unlink()
+            return True
+        except Exception as e:
+            print(f"  [PermissionsModule] health_check error: {e}")
+            return False
+
+    def on_event(self, event: dict) -> None:
+        # Permissions are synchronous and require human input.
+        # They cannot be triggered via the async event bus.
+        pass
+
+
+permissions_module = PermissionsModule()

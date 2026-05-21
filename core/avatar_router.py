@@ -3,6 +3,12 @@
 #
 # Public API:
 #   send_to_avatar(response_text) — detect emotion + content type, route to avatar
+#
+# Stage 4s: AvatarRouterModule implements PocketModule.
+#   start()        — no-op; expressions.json is loaded at import time
+#   stop()         — no-op; pure functions, no threads or connections
+#   health_check() — verifies EMOTION_RULES loaded and is non-empty
+#   on_event()     — handles "avatar_router.send" events from the bus (4q)
 
 import json
 import os
@@ -15,10 +21,11 @@ from core.websocket_server import (
     avatar_panel_close,
     avatar_done_thinking,
 )
+from core.pocket_module import PocketModule
 
 # ── Load expression rules ─────────────────────────────────────────────────────
-_core_dir        = os.path.dirname(os.path.abspath(__file__))
-_project_root    = os.path.join(_core_dir, '..')
+_core_dir         = os.path.dirname(os.path.abspath(__file__))
+_project_root     = os.path.join(_core_dir, '..')
 _expressions_path = os.path.join(_project_root, "config", "expressions.json")
 
 with open(_expressions_path, "r", encoding="utf-8") as f:
@@ -94,3 +101,43 @@ def send_to_avatar(response_text: str):
         avatar_panel(response_text, content_type, "Pocket")
 
     avatar_done_thinking()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# LIFECYCLE — Stage 4s
+# ═════════════════════════════════════════════════════════════════════════════
+
+class AvatarRouterModule(PocketModule):
+    """Lifecycle wrapper for avatar_router.
+
+    This module is pure functions — no threads, no connections, no state
+    beyond the expressions.json data loaded at import time.
+    start() and stop() are no-ops. health_check() confirms the rules loaded.
+    on_event() handles "avatar_router.send" for bus-driven routing (4q).
+    """
+
+    def start(self) -> None:
+        # expressions.json is loaded at import time — nothing to do.
+        pass
+
+    def stop(self) -> None:
+        # Pure functions — nothing to tear down.
+        pass
+
+    def health_check(self) -> bool:
+        try:
+            return len(EMOTION_RULES) > 0
+        except Exception as e:
+            print(f"  [AvatarRouterModule] health_check error: {e}")
+            return False
+
+    def on_event(self, event: dict) -> None:
+        # Supported event: {"type": "avatar_router.send", "text": "..."}
+        if event.get("type") != "avatar_router.send":
+            return
+        text = event.get("text", "")
+        if text:
+            send_to_avatar(text)
+
+
+avatar_router_module = AvatarRouterModule()
