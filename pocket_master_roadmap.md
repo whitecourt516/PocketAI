@@ -57,7 +57,7 @@ Stage 1 — Memory (ChromaDB)                              ✅ COMPLETE
     ↓
 Stage 2 — Voice (Whisper + Piper)                        ✅ COMPLETE
     ↓
-Stage 3 — Interface \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\& Avatar (Electron app)               ✅ COMPLETE
+Stage 3 — Interface \& Avatar (Electron app)               ✅ COMPLETE
     ↓
 Stage 4 — Architecture Hardening + Self-Improvement       ← IN PROGRESS
     ↓
@@ -80,7 +80,7 @@ Stage 9 — Knowledge Expansion + Fine-tuning (ongoing)
 Stage 9+ — Experimental Systems (Multi-Agent, Cognitive Profile, Research Lab)
 ```
 
-> \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*Note:\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* Stages 6–8 from the original roadmap have been reorganized. The future-ideas files introduced several systems (Skill Modes, Memory Reflection, Workspace Awareness, Multi-Model Routing, etc.) that logically belong between Screen Awareness and Full Computer Access. Stage 6 has been split into Early and Late halves to prevent it from becoming an endless stage. Stage 8 is also where the \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*Memory Vault\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* comes together — Stages 6d, 8b, and 8f are its three building blocks, with 8b being the completed system. The Live2D hard stop before Stage 4 ensures all animation work in Stage 5 is built against the real model, not a placeholder. Stage 9+ captures genuinely speculative long-game systems (multi-agent, cognitive profile, research lab) that become possible only after the full stack is stable.
+> \*\*Note:\*\* Stages 6–8 from the original roadmap have been reorganized. The future-ideas files introduced several systems (Skill Modes, Memory Reflection, Workspace Awareness, Multi-Model Routing, etc.) that logically belong between Screen Awareness and Full Computer Access. Stage 6 has been split into Early and Late halves to prevent it from becoming an endless stage. Stage 8 is also where the \*\*Memory Vault\*\* comes together — Stages 6d, 8b, and 8f are its three building blocks, with 8b being the completed system. The Live2D hard stop before Stage 4 ensures all animation work in Stage 5 is built against the real model, not a placeholder. Stage 9+ captures genuinely speculative long-game systems (multi-agent, cognitive profile, research lab) that become possible only after the full stack is stable.
 
 \---
 
@@ -113,7 +113,7 @@ Pocket can hear user and speak back. Both run fully offline.
 
 * **Whisper (base model)** — offline speech to text, F9 push-to-talk
 * **Piper TTS** — offline text to speech, en\_US-lessac-medium voice
-* Voice sessions persist to ChromaDB memory tagged as `\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\[voice]`
+* Voice sessions persist to ChromaDB memory tagged as `\[voice]`
 * Clean speech preprocessing strips markdown before speaking
 * Integrated into unified `pocket.py` — no separate script needed
 
@@ -147,7 +147,7 @@ Pocket has a visual identity — an animated otter avatar that lives on user's d
 |File|What Pocket can change|
 |-|-|
 |`config/expressions.json`|Which words trigger which expression|
-|`persona/prompts/base\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_system.md`|Its own personality|
+|`persona/prompts/base\_system.md`|Its own personality|
 |`app/main.js` CONFIG block|Wander speed, panel corner, window size|
 |`config/config.yaml`|Subtitle threshold, ports, model settings|
 
@@ -165,11 +165,11 @@ Pocket has a visual identity — an animated otter avatar that lives on user's d
 |2026-05-14|4m — Docker backup + recovery strategy / pocket\_backup.bat confirmed clean / orphan volumes removed|
 |2026-05-17|4a — Modular refactor complete (core/memory, tts, stt, websocket\_server, llm, avatar\_router) / 4a.1 — Smoke test suite, all systems green / 4b — Data-driven expression config (config/expressions.json) / 4c — Standardized avatar commands (core/avatar\_router.py) / 4o — TROUBLESHOOTING.md / 4p — config.yaml + .env loader + security denylist + is\_read\_allowed + is\_command\_allowed / 4e — Permission layer + decision log (logs/decisions.jsonl)|
 
-> \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*Why this stage was expanded:\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* The two future-ideas files both identified the same critical point — architectural decisions made here prevent painful rewrites later. Self-improvement capabilities and structural hardening belong together in the same stage. The order below is deliberate — infrastructure and safety rails first, then capability on top of them.
+> \*\*Why this stage was expanded:\*\* The two future-ideas files both identified the same critical point — architectural decisions made here prevent painful rewrites later. Self-improvement capabilities and structural hardening belong together in the same stage. The order below is deliberate — infrastructure and safety rails first, then capability on top of them.
 
-> \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*Order rationale:\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* Git/backup/troubleshooting go first because they protect everything you build afterward. Identity document is written on Day 1 alongside Git — before any self-modification work, including the data-driven expression config. Security threat model must precede the executor. `/read` path restrictions are defined alongside 4p, not separately. WebSocket reconnection must be solid before Stage 5 introduces multiple concurrent avatar event sources. 4d (avatar asset structure) has been moved to Stage 5 — it requires the real Live2D model and belongs at the start of Stage 5 after the hard gate is cleared.
+> \*\*Order rationale:\*\* Git/backup/troubleshooting go first because they protect everything you build afterward. Identity document is written on Day 1 alongside Git — before any self-modification work, including the data-driven expression config. Security threat model must precede the executor. `/read` path restrictions are defined alongside 4p, not separately. WebSocket reconnection must be solid before Stage 5 introduces multiple concurrent avatar event sources. 4d (avatar asset structure) has been moved to Stage 5 — it requires the real Live2D model and belongs at the start of Stage 5 after the hard gate is cleared.
 
-> \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*What to skip until the Live2D model is ready:\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* 4d only. All other Stage 4 tasks are pure Python/backend work and have no dependency on the real model.
+> \*\*What to skip until the Live2D model is ready:\*\* 4d only. All other Stage 4 tasks are pure Python/backend work and have no dependency on the real model.
 
 \---
 
@@ -220,9 +220,9 @@ Backup system in place. Restore verified from clean boot.
 **Protected assets:**
 
 ```
-chroma\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_data/
-n8n\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_data/
-pocket\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_backups/
+chroma_data/
+n8n_data/
+pocket_backups/
 Memory Vault/
 configs/
 logs/
@@ -259,16 +259,16 @@ PocketAI/
 │   ├── persona.py         — system prompt stub
 │   └── expressions.json   — emotion keyword mappings
 ├── core/
-│   ├── config\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_loader.py   — loads config.yaml + .env
+│   ├── config_loader.py   — loads config.yaml + .env
 │   ├── memory.py          — ChromaDB helpers
 │   ├── tts.py             — Piper TTS
 │   ├── stt.py             — Whisper STT + F9 keyboard listener
-│   ├── websocket\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_server.py — avatar WebSocket connection
+│   ├── websocket_server.py — avatar WebSocket connection
 │   ├── llm.py             — Ollama chat handler
-│   ├── avatar\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_router.py   — emotion detection + avatar dispatch
+│   ├── avatar_router.py   — emotion detection + avatar dispatch
 │   └── permissions.py     — permission gate + decision log
 └── tests/
-    └── smoke\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_test.py      — core system smoke tests
+    └── smoke_test.py      — core system smoke tests
 ```
 
 \---
@@ -277,7 +277,7 @@ PocketAI/
 
 **Completed: 2026-05-17**
 
-`tests/smoke\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_test.py` — all 4 active systems green:
+`tests/smoke\_test.py` — all 4 active systems green:
 
 ```
 ✅ Ollama responds
@@ -288,7 +288,7 @@ PocketAI/
 ⏭  Executor — not built yet (Stage 4g)
 ```
 
-Run before and after any significant change: `python tests/smoke\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_test.py`
+Run before and after any significant change: `python tests/smoke\_test.py`
 
 \---
 
@@ -296,7 +296,7 @@ Run before and after any significant change: `python tests/smoke\\\\\\\\\\\\\\\\
 
 **Completed: 2026-05-17**
 
-Emotion mappings moved to `config/expressions.json`. Loaded at runtime by `core/avatar\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_router.py`. Pocket can now modify its own expression rules by editing the JSON without touching core code.
+Emotion mappings moved to `config/expressions.json`. Loaded at runtime by `core/avatar\_router.py`. Pocket can now modify its own expression rules by editing the JSON without touching core code.
 
 \---
 
@@ -304,7 +304,7 @@ Emotion mappings moved to `config/expressions.json`. Loaded at runtime by `core/
 
 **Completed: 2026-05-17**
 
-All avatar routing consolidated into `core/avatar\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_router.py`. Consistent command structure flowing through `send\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_to\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_avatar()` → websocket\_server. pocket.py is now a clean orchestrator with no avatar logic inline.
+All avatar routing consolidated into `core/avatar\_router.py`. Consistent command structure flowing through `send\_to\_avatar()` → websocket\_server. pocket.py is now a clean orchestrator with no avatar logic inline.
 
 \---
 
@@ -314,17 +314,17 @@ All avatar routing consolidated into `core/avatar\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
 
 * `config/config.yaml` — single source of truth for all settings
 * `.env` / `.env.example` — secrets and machine-specific overrides, never committed
-* `core/config\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_loader.py` — loads both, resolves paths, exposes `CFG` dict
-* `is\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_read\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_allowed(path)` — enforces read denylist before /read executes
-* `is\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_command\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_allowed(cmd)` — enforces executor denylist before any shell call
+* `core/config\_loader.py` — loads both, resolves paths, exposes `CFG` dict
+* `is\_read\_allowed(path)` — enforces read denylist before /read executes
+* `is\_command\_allowed(cmd)` — enforces executor denylist before any shell call
 * Security policy defined: external content is data, not authority
 
 **Denylist (config.yaml):**
 
 ```yaml
 security:
-  read\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_denylist: \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\[.env, .env.local, chroma\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_data/, pocket\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_backups/]
-  executor\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_denylist: \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\[rm -rf, format, shutdown, diskpart, reg delete, del /f]
+  read_denylist: \[.env, .env.local, chroma_data/, pocket_backups/]
+  executor_denylist: \[rm -rf, format, shutdown, diskpart, reg delete, del /f]
 ```
 
 \---
@@ -335,7 +335,7 @@ security:
 
 **Completed: 2026-05-17**
 
-`core/permissions.py` — every real-world action passes through `propose\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_action()`:
+`core/permissions.py` — every real-world action passes through `propose\_action()`:
 
 ```
 Pocket proposes action
@@ -344,56 +344,56 @@ Pocket proposes action
 → user types y/n
 → logs the decision to logs/decisions.jsonl
 → executes only on y
-→ result recorded via record\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_outcome()
+→ result recorded via record_outcome()
 ```
 
 Decision log: `logs/decisions.jsonl` — append-only JSONL, excluded from git.
 
 ChromaDB collection naming convention established:
 
-* `personal\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_memory` — conversations (current)
-* `pocket\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_decisions` — reserved for future decision indexing
-* `pocket\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_knowledge` — reserved for knowledge base entries
+* `personal\_memory` — conversations (current)
+* `pocket\_decisions` — reserved for future decision indexing
+* `pocket\_knowledge` — reserved for knowledge base entries
 
 \---
 
 ### ✅4f — /read Command (COMPLETE)
 
-Lets Pocket read its own code and any file user points at. Foundation for all self-improvement. Runs through `is\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_read\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_allowed()` from config\_loader before any file is opened.
+Lets Pocket read its own code and any file user points at. Foundation for all self-improvement. Runs through `is\_read\_allowed()` from config\_loader before any file is opened.
 
 Key files Pocket should be able to read:
 
 * `pocket.py` — its own orchestrator
-* `core/\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*.py` — its own subsystems
+* `core/\*.py` — its own subsystems
 * `app/main.js` — wandering and window behavior
 * `app/renderer/avatar.html` — visual appearance
-* `pocket\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_master\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_roadmap.md` — its own development plan
+* `pocket\_master\_roadmap.md` — its own development plan
 
 \---
 
 ### ✅4g — Sandboxed Code Executor(COMPLETE)
 
-Pocket writes code → user approves via `propose\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_action()` → it runs → output fed back → Pocket adjusts. Every command checked against executor denylist before user is even asked.
+Pocket writes code → user approves via `propose\_action()` → it runs → output fed back → Pocket adjusts. Every command checked against executor denylist before user is even asked.
 
 ### ✅4g.1 — Rollback Convention (build alongside 4g) (COMPLETE)
 
 Before Pocket modifies any file, it makes a backup. No exceptions.
 
 ```
-pocket\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_backups/
-└── YYYY-MM-DD\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_HHMMSS\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_filename.ext
+pocket_backups/
+└── YYYY-MM-DD_HHMMSS_filename.ext
 ```
 
 * Backup created automatically before any approved file modification
 * Pocket confirms backup path in its proposal message
-* `/rollback \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\[filename]` command restores the most recent backup
+* `/rollback \[filename]` command restores the most recent backup
 * Backups kept for 30 days, then pruned
 
 **Scope note:** This rollback convention covers files only. ChromaDB vector writes and decision log entries (JSONL) are not covered — the Docker backup system (4m) is the recovery path for those.
 
 \---
 
-### 4s — Module Lifecycle Contract
+### ✅4s — Module Lifecycle Contract (COMPLETE)
 
 **Priority: First — define the interface everything else plugs into**
 
@@ -405,8 +405,8 @@ As more modules are added, there's no standard way to start them, stop them, or 
 class PocketModule:
     def start(self) -> None: ...       # called on launch
     def stop(self) -> None: ...        # called on clean shutdown
-    def health\_check(self) -> bool: ...  # called by 4j startup checks
-    def on\_event(self, event) -> None: ... # called by event bus (4q)
+    def health_check(self) -> bool: ...  # called by 4j startup checks
+    def on_event(self, event) -> None: ... # called by event bus (4q)
 ```
 
 **Why first:** This is a two-hour task that makes every subsequent module cleaner. 4j startup health checks become generic instead of hard-coded per module. 4q event bus has a standard subscriber interface. Do it before you write any new module code.
@@ -427,7 +427,7 @@ A Runtime State Manager is a lightweight shared object that all modules read and
 state = {
     "avatar": {"expression": "thinking", "speaking": True},
     "connection": {"websocket": "CONNECTED"},
-    "session": {"voice\_active": False, "current\_query": "..."},
+    "session": {"voice_active": False, "current_query": "..."},
     "health": {"ollama": True, "chroma": True, "piper": True}
 }
 ```
@@ -447,7 +447,7 @@ An internal event bus decouples every module. Nothing calls another module direc
 **Pattern:**
 
 ```python
-# core/event\_bus.py
+# core/event_bus.py
 bus.emit("avatar.expression", {"name": "thinking", "source": "llm"})
 bus.emit("tts.speak", {"text": "...", "priority": 1})
 bus.emit("memory.store", {"content": "...", "tags": \["voice"]})
@@ -465,7 +465,7 @@ Stage 5 introduces multiple concurrent avatar event sources. The WebSocket conne
 
 If Electron crashes, restarts, reloads, or disconnects temporarily, `pocket.py` must detect disconnect immediately, enter degraded avatar mode, retry automatically, re-sync avatar state, and resume queued commands safely.
 
-Required reconnection states: `CONNECTED → DISCONNECTED → RECONNECTING → DEGRADED\\\_MODE → RESYNCING`
+Required reconnection states: `CONNECTED → DISCONNECTED → RECONNECTING → DEGRADED\_MODE → RESYNCING`
 
 These states live in `state\["connection"]\["websocket"]` (4r) — not in a local variable inside the WebSocket module. That way 4t can display them and 4j.1 can monitor them without coupling.
 
@@ -485,7 +485,7 @@ Replace silent waiting with an explicit health check sequence. Calls `health\_ch
 
 ```
 \[1/4] Checking Ollama...        ✅ Ready (port 11434)
-\[2/4] Checking ChromaDB...      ✅ Ready (chroma\_data/)
+\[2/4] Checking ChromaDB...      ✅ Ready (chroma_data/)
 \[3/4] Checking WebSocket...     ✅ Ready (port 7845)
 \[4/4] Checking Piper TTS...     ✅ Ready
 Pocket is online.
@@ -566,9 +566,9 @@ pip install requests beautifulsoup4
 
 **Priority: Medium-Advanced | Estimated time: 1-2 weekends**
 
-> \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*Consolidation note:\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* Dynamic idle behaviors (ambient animations, mouse reactions, sleepy states) were listed in both future-ideas files as Stage 5-6. They belong here alongside screen awareness since both are about Pocket perceiving and reacting to its environment.
+> \*\*Consolidation note:\*\* Dynamic idle behaviors (ambient animations, mouse reactions, sleepy states) were listed in both future-ideas files as Stage 5-6. They belong here alongside screen awareness since both are about Pocket perceiving and reacting to its environment.
 
-> \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*Order rationale:\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* VRAM management and privacy boundaries must be defined \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*before\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* loading a vision model or taking screenshots. Expression arbitration must be in place \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*before\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* introducing concurrent behavior sources (idle + conversation + workspace). Infrastructure first, then the capabilities that depend on it.
+> \*\*Order rationale:\*\* VRAM management and privacy boundaries must be defined \*before\* loading a vision model or taking screenshots. Expression arbitration must be in place \*before\* introducing concurrent behavior sources (idle + conversation + workspace). Infrastructure first, then the capabilities that depend on it.
 
 ## ⛔ HARD STOP — Live2D Otter Model
 
@@ -592,12 +592,12 @@ The real Live2D rigged `.moc3` otter model must be in place before Stage 5 begin
 
 **First task of Stage 5 — do immediately after Live2D gate is cleared**
 
-> \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*Note:\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* This task was originally 4d in Stage 4 and was deferred here because it requires the real `.moc3` model to be in place. Do not attempt before the hard gate above is complete.
+> \*\*Note:\*\* This task was originally 4d in Stage 4 and was deferred here because it requires the real `.moc3` model to be in place. Do not attempt before the hard gate above is complete.
 
 ```
 pocket-avatar/
 ├── models/
-│   ├── otter\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_v1/
+│   ├── otter_v1/
 │   └── experimental/
 ├── expressions/
 ├── physics/
@@ -630,7 +630,7 @@ On VRAM exhaustion: abort non-critical load, preserve conversation model, notify
 
 **Priority: REQUIRED — do this before 5a (taking screenshots)**
 
-Create `privacy\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_config.yaml` covering: ignored folders (banking/, taxes/, passwords/), ignored file types (.kdbx, .env), ignored apps (password managers), screenshot suppression for fullscreen banking/login windows, and voice suppression during meetings/calls.
+Create `privacy\_config.yaml` covering: ignored folders (banking/, taxes/, passwords/), ignored file types (.kdbx, .env), ignored apps (password managers), screenshot suppression for fullscreen banking/login windows, and voice suppression during meetings/calls.
 
 **Observation modes:**
 
@@ -710,7 +710,7 @@ With the arbitration layer in place, Pocket gains ambient animations and environ
 * Sleepy states during inactivity
 * Quieter during games/fullscreen apps
 
-> \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*Extension note:\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* Spatial workspace awareness — learning which monitor is coding vs research, recognizing fullscreen IDE as deep focus mode — is a natural extension of 5c.
+> \*\*Extension note:\*\* Spatial workspace awareness — learning which monitor is coding vs research, recognizing fullscreen IDE as deep focus mode — is a natural extension of 5c.
 
 ### Bookmark
 
@@ -722,7 +722,7 @@ With the arbitration layer in place, Pocket gains ambient animations and environ
 
 **Priority: Advanced | Builds on Stages 4-5**
 
-> \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*Why Stage 6 is split:\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* Stage 6 originally contained six substantial sub-systems. Semantic search and Skill Modes deliver the most immediate practical value and are relatively self-contained. The remaining systems (reflection, routing, emotional continuity) build on each other and are better tackled as a second pass once 6-Early is stable.
+> \*\*Why Stage 6 is split:\*\* Stage 6 originally contained six substantial sub-systems. Semantic search and Skill Modes deliver the most immediate practical value and are relatively self-contained. The remaining systems (reflection, routing, emotional continuity) build on each other and are better tackled as a second pass once 6-Early is stable.
 
 ### 6a — Local Semantic Search
 
@@ -768,11 +768,11 @@ Pocket recognizes active sessions (coding, writing, research, gaming) and adapts
 
 ### 6d — Memory Reflection System
 
-> \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*Memory Vault — Building Block 1 of 3\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*
+> \*\*Memory Vault — Building Block 1 of 3\*\*
 
 Pocket periodically reviews conversations, projects, recurring themes, and unfinished tasks, then generates long-term summaries, project continuity notes, recurring goal tracking, and observations.
 
-> \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*Vault schema decision — do this before building 6d:\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\* Decide the top-level structure of the Memory Vault before Pocket starts writing reflections. Suggested categories: `projects/`, `people/`, `concepts/`, `tools/`, `lessons-learned/`, `goals/`. Each entry is a markdown file, interlinked with `\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\[\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\[wiki-style]]` references. Sketch this in a `vault-schema.md` file during Stage 6-Early.
+> \*\*Vault schema decision — do this before building 6d:\*\* Decide the top-level structure of the Memory Vault before Pocket starts writing reflections. Suggested categories: `projects/`, `people/`, `concepts/`, `tools/`, `lessons-learned/`, `goals/`. Each entry is a markdown file, interlinked with `\[\[wiki-style]]` references. Sketch this in a `vault-schema.md` file during Stage 6-Early.
 
 \---
 
@@ -1104,7 +1104,7 @@ Architecture comparison, fine-tune experiments, model evaluation.
 
 Pocket's strongest long-term identity:
 
-> \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*"A persistent local AI companion with memory, voice, visual presence, tool use, contextual awareness, and gradually evolving self-expression."\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*
+> \*"A persistent local AI companion with memory, voice, visual presence, tool use, contextual awareness, and gradually evolving self-expression."\*
 
 Every system should:
 

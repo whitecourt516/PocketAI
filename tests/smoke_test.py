@@ -147,7 +147,6 @@ check("/read loads allowed files + blocks denylist", test_read_command)
 skip("Executor", "requires interactive approval — tested manually")
 
 
-# ═════════════════════════════════════════════════════════════════════════════
 # STAGE 4s — MODULE LIFECYCLE CONTRACT
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -172,6 +171,49 @@ def test_abc_enforcement():
 
 check("ABC rejects incomplete module", test_abc_enforcement)
 
+# --- 4r: Runtime State Manager ---
+print("\n[4r] Runtime State Manager")
+try:
+    from core.state_manager import state
+
+    # Expression
+    state.set_expression("happy", source="test")
+    assert state.expression == "happy"
+    assert state.get("avatar", "expression_source") == "test"
+
+    # WebSocket status
+    state.set_websocket_status("CONNECTED")
+    assert state.websocket_status == "CONNECTED"
+    assert state.get("connection", "reconnect_attempts") == 0
+
+    state.set_websocket_status("RECONNECTING")
+    state.increment_reconnect_attempts()
+    assert state.get("connection", "reconnect_attempts") == 1
+
+    # Health
+    state.update_health("ollama", True)
+    state.update_health("chroma", True)
+    state.update_health("piper", True)
+    state.update_health("websocket", True)
+    assert state.all_healthy()
+
+    # Snapshot doesn't mutate live state
+    snap = state.snapshot()
+    snap["avatar"]["expression"] = "MUTATED"
+    assert state.expression == "happy"
+
+    # Invalid status raises
+    try:
+        state.set_websocket_status("BOGUS")
+        print("  ❌ Should have raised ValueError")
+    except ValueError:
+        pass
+
+    print("  ✅ State Manager — all checks passed")
+    print(state)
+
+except Exception as e:
+    print(f"  ❌ State Manager failed: {e}")
 
 # ── All module instances exist ────────────────────────────────────────────────
 def test_module_instances():
