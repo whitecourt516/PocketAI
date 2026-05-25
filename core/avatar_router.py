@@ -22,6 +22,7 @@ from core.websocket_server import (
     avatar_done_thinking,
 )
 from core.pocket_module import PocketModule
+from core.state_manager import state
 
 # ── Load expression rules ─────────────────────────────────────────────────────
 _core_dir         = os.path.dirname(os.path.abspath(__file__))
@@ -82,10 +83,13 @@ def truncate_subtitle(text: str) -> str:
 
 def send_to_avatar(response_text: str):
     """Route Pocket's reply to the avatar — expression + subtitle or panel."""
+    state.set_thinking(True)
+
     emotion      = detect_emotion(response_text)
     content_type = detect_content_type(response_text)
 
     avatar_expression(emotion)
+    state.set_expression(emotion, "avatar_router")
 
     if content_type == "subtitle":
         duration = max(3000, len(response_text) * 60)
@@ -101,6 +105,7 @@ def send_to_avatar(response_text: str):
         avatar_panel(response_text, content_type, "Pocket")
 
     avatar_done_thinking()
+    state.set_thinking(False)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

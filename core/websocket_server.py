@@ -26,6 +26,7 @@ import websockets
 
 from core.config_loader import CFG
 from core.pocket_module import PocketModule
+from core.state_manager import state
 
 AVATAR_WS_URL = CFG["avatar"]["websocket_url"]
 
@@ -45,9 +46,13 @@ async def _avatar_connect():
     try:
         _avatar_ws = await websockets.connect(AVATAR_WS_URL)
         _avatar_connected = True
+        state.set_websocket_status("CONNECTED")
+        state.update_health("websocket", True)
         print("  [Avatar connected ✓]")
     except Exception:
         _avatar_connected = False
+        state.set_websocket_status("DISCONNECTED")
+        state.update_health("websocket", False)
 
 
 async def _avatar_send(msg: dict):
@@ -58,6 +63,8 @@ async def _avatar_send(msg: dict):
         await _avatar_ws.send(json.dumps(msg))
     except Exception:
         _avatar_connected = False
+        state.set_websocket_status("DISCONNECTED")
+        state.update_health("websocket", False)
 
 
 async def _avatar_disconnect():
@@ -69,6 +76,8 @@ async def _avatar_disconnect():
             pass
     _avatar_connected = False
     _avatar_ws = None
+    state.set_websocket_status("DISCONNECTED")
+    state.update_health("websocket", False)
 
 
 def _run_loop(loop):
