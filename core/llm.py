@@ -18,7 +18,7 @@ import ollama
 from config.settings import MODEL
 from persona.prompt_loader import SYSTEM_PROMPT
 from core.memory import get_relevant_memories, save_memory
-from core.websocket_server import avatar_thinking, avatar_done_thinking
+from core.websocket_server import websocket_module
 from core.tts import tts_queue
 from core.pocket_module import PocketModule
 
@@ -37,7 +37,8 @@ def handle_user_input_sync(text: str):
     """Process user input, get LLM reply, update memory and avatar."""
     global session_history
 
-    avatar_thinking()
+    websocket_module.send({"type": "expression", "value": "thinking"})
+    websocket_module.send({"type": "wander_pause"})
 
     past        = get_relevant_memories(text)
     full_system = SYSTEM_PROMPT + (f"\n\n{past}" if past else "")
@@ -52,7 +53,7 @@ def handle_user_input_sync(text: str):
     except Exception as e:
         reply = f"[LLM error: {e}]"
         print(reply)
-        avatar_done_thinking()
+        websocket_module.send({"type": "wander_resume"})
         return
 
     session_history.append({"role": "user",      "content": text})

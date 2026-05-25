@@ -1,192 +1,249 @@
 # core/websocket_server.py
-# Avatar WebSocket connection — connects to Electron and sends messages.
+# Stage 4n — WebSocket Reconnection Engine (built on top of 4r state manager)
 #
-# Public API:
-#   start_avatar_connection()          — call once at startup
-#   avatar_send(msg)                   — thread-safe fire-and-forget
-#   avatar_expression(name)            — send an expression
-#   avatar_subtitle(text, duration)    — send subtitle text
-#   avatar_panel(content, type, title) — open output panel
-#   avatar_panel_close()               — close output panel
-#   avatar_thinking()                  — expression + pause wander
-#   avatar_done_thinking()             — resume wander
+# Manages the persistent WebSocket connection between pocket.py and the
+# Electron avatar. Detects disconnects, retries with exponential backoff
+# (cap: 60s, max: 10 attempts), re-syncs avatar state on reconnect.
+#
+# Backoff schedule (seconds): 1, 2, 4, 8, 16, 30, 60, 60, 60, 60 → DEGRADED_MODE
+#
+# State machine (lives in state_manager, namespace "connection"):
+#   CONNECTED → DISCONNECTED → RECONNECTING → RESYNCING → CONNECTED
+#                                           ↓ (10 failures)
+#                                        DEGRADED_MODE
 #
 # Stage 4s: WebSocketModule implements PocketModule.
-#   start()        — calls start_avatar_connection()
-#   stop()         — stops the asyncio event loop cleanly
-#   health_check() — returns _avatar_connected
-#   on_event()     — handles "avatar.*" events from the bus (4q)
 
 import asyncio
 import json
 import threading
 import time
+import traceback
 
 import websockets
+import websockets.connection
 
-from core.config_loader import CFG
 from core.pocket_module import PocketModule
 from core.state_manager import state
-
-AVATAR_WS_URL = CFG["avatar"]["websocket_url"]
-
-# ── Runtime state ─────────────────────────────────────────────────────────────
-_avatar_ws        = None
-_avatar_connected = False
-_loop             = None
-_loop_thread: threading.Thread | None = None
+from core.event_bus import bus
+from core.config_loader import CFG
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# INTERNAL — async connect + send
+# CONSTANTS
 # ═════════════════════════════════════════════════════════════════════════════
 
-async def _avatar_connect():
-    global _avatar_ws, _avatar_connected
-    try:
-        _avatar_ws = await websockets.connect(AVATAR_WS_URL)
-        _avatar_connected = True
-        state.set_websocket_status("CONNECTED")
-        state.update_health("websocket", True)
-        print("  [Avatar connected ✓]")
-    except Exception:
-        _avatar_connected = False
-        state.set_websocket_status("DISCONNECTED")
-        state.update_health("websocket", False)
-
-
-async def _avatar_send(msg: dict):
-    global _avatar_ws, _avatar_connected
-    if not _avatar_connected or not _avatar_ws:
-        return
-    try:
-        await _avatar_ws.send(json.dumps(msg))
-    except Exception:
-        _avatar_connected = False
-        state.set_websocket_status("DISCONNECTED")
-        state.update_health("websocket", False)
-
-
-async def _avatar_disconnect():
-    global _avatar_ws, _avatar_connected
-    if _avatar_ws:
-        try:
-            await _avatar_ws.close()
-        except Exception:
-            pass
-    _avatar_connected = False
-    _avatar_ws = None
-    state.set_websocket_status("DISCONNECTED")
-    state.update_health("websocket", False)
-
-
-def _run_loop(loop):
-    asyncio.set_event_loop(loop)
-    loop.run_forever()
+BACKOFF_SCHEDULE = [1, 2, 4, 8, 16, 30, 60, 60, 60, 60]  # seconds, 10 attempts
+MAX_ATTEMPTS     = len(BACKOFF_SCHEDULE)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# PUBLIC API (unchanged)
-# ═════════════════════════════════════════════════════════════════════════════
-
-def start_avatar_connection():
-    """Spin up the async event loop and connect to the Electron avatar."""
-    global _loop, _loop_thread
-    _loop = asyncio.new_event_loop()
-    _loop_thread = threading.Thread(target=_run_loop, args=(_loop,), daemon=True, name="ws-loop")
-    _loop_thread.start()
-    time.sleep(0.5)
-    asyncio.run_coroutine_threadsafe(_avatar_connect(), _loop)
-
-
-def avatar_send(msg: dict):
-    """Thread-safe fire-and-forget send to avatar."""
-    if _loop and _avatar_connected:
-        asyncio.run_coroutine_threadsafe(_avatar_send(msg), _loop)
-
-
-def avatar_expression(name: str):
-    avatar_send({"type": "expression", "value": name})
-
-
-def avatar_subtitle(text: str, duration: int = 5000):
-    avatar_send({"type": "speech", "text": text, "duration": duration})
-
-
-def avatar_panel(content: str, content_type: str, title: str = "Pocket"):
-    avatar_send({"type": "panel", "content": content,
-                 "contentType": content_type, "title": title})
-
-
-def avatar_panel_close():
-    avatar_send({"type": "panel_close"})
-
-
-def avatar_thinking():
-    avatar_expression("thinking")
-    avatar_send({"type": "wander_pause"})
-
-
-def avatar_done_thinking():
-    avatar_send({"type": "wander_resume"})
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# LIFECYCLE — Stage 4s
+# WEBSOCKET MODULE
 # ═════════════════════════════════════════════════════════════════════════════
 
 class WebSocketModule(PocketModule):
-    """Lifecycle wrapper for the avatar WebSocket connection.
-
-    start()        — starts the asyncio loop thread and connects to Electron.
-    stop()         — closes the WebSocket and stops the event loop.
-    health_check() — returns True if the connection is currently established.
-    on_event()     — handles "avatar.*" bus events and dispatches to the avatar.
-                     This is the main path 4q will use to send avatar commands
-                     without any module importing websocket_server directly.
+    """
+    Manages the WebSocket connection to the Electron avatar.
+    Runs a background thread that owns the asyncio event loop.
+    All public methods (send, start, stop) are thread-safe.
     """
 
+    def __init__(self):
+        self._ws           = None          # live websocket connection
+        self._loop         = None          # asyncio loop owned by background thread
+        self._thread       = None          # background thread
+        self._running      = False         # set False to trigger clean shutdown
+        self._lock         = threading.Lock()
+
+    # ------------------------------------------------------------------
+    # PocketModule interface
+    # ------------------------------------------------------------------
+
     def start(self) -> None:
-        start_avatar_connection()
+        if self._thread and self._thread.is_alive():
+            return  # already running
+
+        self._running = True
+        self._thread  = threading.Thread(
+            target=self._run_loop,
+            name="websocket-manager",
+            daemon=True
+        )
+        self._thread.start()
 
     def stop(self) -> None:
-        if _loop and _loop.is_running():
-            asyncio.run_coroutine_threadsafe(_avatar_disconnect(), _loop)
-            time.sleep(0.3)
-            _loop.call_soon_threadsafe(_loop.stop)
+        self._running = False
+        if self._loop and self._loop.is_running():
+            asyncio.run_coroutine_threadsafe(self._disconnect(), self._loop)
+        if self._thread:
+            self._thread.join(timeout=5)
+        state.set_websocket_status("DISCONNECTED")
 
     def health_check(self) -> bool:
-        try:
-            return _avatar_connected
-        except Exception as e:
-            print(f"  [WebSocketModule] health_check error: {e}")
-            return False
+        return state.websocket_status == "CONNECTED"
 
     def on_event(self, event: dict) -> None:
-        # Dispatch avatar.* bus events to the appropriate send function.
-        # {"type": "avatar.expression", "name": "happy"}
-        # {"type": "avatar.subtitle",   "text": "...", "duration": 4000}
-        # {"type": "avatar.panel",      "content": "...", "content_type": "text", "title": "Pocket"}
-        # {"type": "avatar.panel_close"}
-        # {"type": "avatar.thinking"}
-        # {"type": "avatar.done_thinking"}
-        t = event.get("type", "")
-        if t == "avatar.expression":
-            avatar_expression(event.get("name", "neutral"))
-        elif t == "avatar.subtitle":
-            avatar_subtitle(event.get("text", ""), event.get("duration", 5000))
-        elif t == "avatar.panel":
-            avatar_panel(
-                event.get("content", ""),
-                event.get("content_type", "text"),
-                event.get("title", "Pocket"),
-            )
-        elif t == "avatar.panel_close":
-            avatar_panel_close()
-        elif t == "avatar.thinking":
-            avatar_thinking()
-        elif t == "avatar.done_thinking":
-            avatar_done_thinking()
+        # Supported: {"type": "websocket.send", "data": {...}}
+        if event.get("type") != "websocket.send":
+            return
+        data = event.get("data")
+        if data:
+            self.send(data)
+
+    # ------------------------------------------------------------------
+    # Public send — callable from any thread
+    # ------------------------------------------------------------------
+
+    def send(self, data: dict) -> bool:
+        """
+        Send a dict to the avatar as JSON.
+        Returns True if sent, False if not connected.
+        Silently drops the message in DEGRADED_MODE — Pocket keeps running.
+        """
+        if state.websocket_status not in ("CONNECTED", "RESYNCING"):
+            return False
+        if not self._loop or not self._loop.is_running():
+            return False
+
+        future = asyncio.run_coroutine_threadsafe(
+            self._send_raw(json.dumps(data)),
+            self._loop
+        )
+        try:
+            future.result(timeout=3)
+            return True
+        except Exception as e:
+            print(f"  [WebSocket] send failed: {e}")
+            return False
+
+    # ------------------------------------------------------------------
+    # Background thread — owns the asyncio loop
+    # ------------------------------------------------------------------
+
+    def _run_loop(self) -> None:
+        self._loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._loop)
+        try:
+            self._loop.run_until_complete(self._connection_manager())
+        finally:
+            self._loop.close()
+
+    # ------------------------------------------------------------------
+    # Connection manager — reconnect loop
+    # ------------------------------------------------------------------
+
+    async def _connection_manager(self) -> None:
+        url = CFG.get("avatar", {}).get("websocket_url", "ws://localhost:7845")
+
+        while self._running:
+            attempt = state.get("connection", "reconnect_attempts")
+
+            if attempt >= MAX_ATTEMPTS:
+                # Give up — stay in DEGRADED_MODE until restart
+                if state.websocket_status != "DEGRADED_MODE":
+                    state.set_websocket_status("DEGRADED_MODE")
+                    bus.emit("connection.websocket.degraded", {
+                        "reason": "Max reconnection attempts reached",
+                        "attempts": attempt
+                    })
+                    print(f"  [WebSocket] DEGRADED_MODE — gave up after {attempt} attempts. Restart Pocket to retry.")
+                await asyncio.sleep(5)  # idle, don't spin
+                continue
+
+            # Set status before attempting
+            if attempt > 0:
+                state.set_websocket_status("RECONNECTING")
+                bus.emit("connection.websocket.reconnecting", {"attempt": attempt})
+
+            try:
+                async with websockets.connect(url, open_timeout=5) as ws:
+                    with self._lock:
+                        self._ws = ws
+
+                    state.set_websocket_status("CONNECTED")
+                    bus.emit("connection.websocket.connected", {"attempt": attempt})
+
+                    if attempt > 0:
+                        # Reconnect — re-sync avatar state
+                        await self._resync()
+
+                    print(f"  [WebSocket] Connected to avatar at {url}")
+
+                    # Hold connection open, detect drops
+                    await self._hold(ws)
+
+            except Exception as e:
+                with self._lock:
+                    self._ws = None
+
+                attempts_now = state.increment_reconnect_attempts()
+                state.set_websocket_status("DISCONNECTED")
+                bus.emit("connection.websocket.disconnected", {
+                    "reason": str(e),
+                    "attempt": attempts_now
+                })
+
+                if attempts_now < MAX_ATTEMPTS:
+                    wait = BACKOFF_SCHEDULE[attempts_now - 1]
+                    print(f"  [WebSocket] Disconnected ({e}). Retry {attempts_now}/{MAX_ATTEMPTS} in {wait}s...")
+                    await asyncio.sleep(wait)
+                # loop continues — either retries or hits MAX_ATTEMPTS guard above
+
+    async def _hold(self, ws) -> None:
+        """Keep connection alive until it drops or we're told to stop."""
+        try:
+            async for _ in ws:
+                pass  # drain any incoming messages (avatar → pocket, future use)
+        except Exception:
+            pass  # disconnect detected — fall back to connection_manager
+
+    async def _resync(self) -> None:
+        """After reconnect, push current avatar state from 4r to the avatar."""
+        state.set_websocket_status("RESYNCING")
+        try:
+            expression = state.expression
+            speaking   = state.speaking
+            thinking   = state.thinking
+
+            if expression and expression != "neutral":
+                await self._send_raw(json.dumps({
+                    "command": "set_expression",
+                    "expression": expression
+                }))
+
+            if thinking:
+                await self._send_raw(json.dumps({"command": "thinking_start"}))
+
+            if speaking:
+                await self._send_raw(json.dumps({"command": "speaking_start"}))
+
+        except Exception as e:
+            print(f"  [WebSocket] Resync failed: {e}")
+        finally:
+            state.set_websocket_status("CONNECTED")
+
+    async def _send_raw(self, message: str) -> None:
+        with self._lock:
+            ws = self._ws
+        if ws:
+            await ws.send(message)
+
+    async def _disconnect(self) -> None:
+        with self._lock:
+            ws = self._ws
+        if ws:
+            await ws.close()
 
 
+# Singleton
 websocket_module = WebSocketModule()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# LEGACY SEND HELPER
+# kept so existing pocket.py calls don't break during migration
+# ═════════════════════════════════════════════════════════════════════════════
+
+def send_to_avatar(data: dict) -> bool:
+    """Thin wrapper — routes through websocket_module.send()."""
+    return websocket_module.send(data)

@@ -14,13 +14,7 @@ import json
 import os
 import re
 
-from core.websocket_server import (
-    avatar_expression,
-    avatar_subtitle,
-    avatar_panel,
-    avatar_panel_close,
-    avatar_done_thinking,
-)
+from core.websocket_server import websocket_module
 from core.pocket_module import PocketModule
 from core.state_manager import state
 
@@ -88,23 +82,23 @@ def send_to_avatar(response_text: str):
     emotion      = detect_emotion(response_text)
     content_type = detect_content_type(response_text)
 
-    avatar_expression(emotion)
+    websocket_module.send({"type": "expression", "value": emotion})
     state.set_expression(emotion, "avatar_router")
 
     if content_type == "subtitle":
         duration = max(3000, len(response_text) * 60)
-        avatar_subtitle(response_text, duration)
-        avatar_panel_close()
+        websocket_module.send({"type": "speech", "text": response_text, "duration": duration})
+        websocket_module.send({"type": "panel_close"})
     elif content_type == "code":
         code = extract_code(response_text)
-        avatar_subtitle("Here's the code ↘", 3000)
-        avatar_panel(code, "code", "Code")
+        websocket_module.send({"type": "speech", "text": "Here's the code ↘", "duration": 3000})
+        websocket_module.send({"type": "panel", "content": code, "contentType": "code", "title": "Code"})
     else:
         first = response_text.split('.')[0].strip() + '.'
-        avatar_subtitle(truncate_subtitle(first), 4000)
-        avatar_panel(response_text, content_type, "Pocket")
+        websocket_module.send({"type": "speech", "text": truncate_subtitle(first), "duration": 4000})
+        websocket_module.send({"type": "panel", "content": response_text, "contentType": content_type, "title": "Pocket"})
 
-    avatar_done_thinking()
+    websocket_module.send({"type": "wander_resume"})
     state.set_thinking(False)
 
 

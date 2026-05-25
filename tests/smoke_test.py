@@ -268,6 +268,57 @@ try:
 except Exception as e:
     print(f"  ❌ Event Bus failed: {e}")
 
+    # --- 4n: WebSocket Reconnection Engine ---
+print("\n[4n] WebSocket Reconnection Engine")
+try:
+    from core.websocket_server import websocket_module
+    from core.state_manager import state
+    from core.event_bus import bus
+
+    events_received = []
+    bus.subscribe("connection.websocket.connected",    lambda e: events_received.append(e["type"]))
+    bus.subscribe("connection.websocket.disconnected", lambda e: events_received.append(e["type"]))
+    bus.subscribe("connection.websocket.reconnecting", lambda e: events_received.append(e["type"]))
+    bus.subscribe("connection.websocket.degraded",     lambda e: events_received.append(e["type"]))
+
+    # Start — if Electron is running this will connect
+    websocket_module.start()
+    import time; time.sleep(1)
+
+    ws_status = state.websocket_status
+    print(f"  WebSocket status: {ws_status}")
+
+    if ws_status == "CONNECTED":
+        # Confirm send works
+        sent = websocket_module.send({"command": "smoke_test_ping"})
+        assert sent, "send() returned False despite CONNECTED status"
+        print("  ✅ WebSocket reconnection engine — connected and send confirmed")
+    else:
+        # Electron not running — confirm degraded mode behavior (no crash)
+        assert ws_status in ("DISCONNECTED", "RECONNECTING", "DEGRADED_MODE"), \
+            f"Unexpected status: {ws_status}"
+        # Confirm send silently drops without crashing
+        sent = websocket_module.send({"command": "smoke_test_ping"})
+        assert not sent, "send() should return False when not connected"
+        print(f"  ✅ WebSocket reconnection engine — Electron not running, degraded gracefully ({ws_status})")
+
+    # health_check reflects actual status
+    healthy = websocket_module.health_check()
+    assert healthy == (ws_status == "CONNECTED")
+
+    # on_event ignores unknown events (already covered by on_event_safety test)
+
+    # Cleanup test subscriptions
+    bus.unsubscribe_all("connection.websocket.connected")
+    bus.unsubscribe_all("connection.websocket.disconnected")
+    bus.unsubscribe_all("connection.websocket.reconnecting")
+    bus.unsubscribe_all("connection.websocket.degraded")
+
+    print(f"  Events received during test: {events_received}")
+
+except Exception as e:
+    print(f"  ❌ WebSocket reconnection engine failed: {e}")
+
 # ── All module instances exist ────────────────────────────────────────────────
 def test_module_instances():
     from core.pocket_module      import PocketModule
@@ -277,6 +328,7 @@ def test_module_instances():
     from core.avatar_router      import avatar_router_module
     from core.executor           import executor_module
     from core.event_bus          import event_bus_module
+    from core.websocket_server   import websocket_module
 
     for mod in [
         config_loader_module,
@@ -285,6 +337,7 @@ def test_module_instances():
         avatar_router_module,
         executor_module,
         event_bus_module,
+        websocket_module,
     ]:
         assert isinstance(mod, PocketModule), f"{mod} is not a PocketModule"
 
@@ -383,14 +436,15 @@ def test_on_event_safety():
     from core.llm            import llm_module
     from core.tts            import tts_module
     from core.stt            import stt_module
-    from core.event_bus     import event_bus_module
+    from core.event_bus      import event_bus_module
+    from core.websocket_server import websocket_module
 
     garbage_event = {"type": "totally.unknown.event", "payload": "nonsense"}
 
     for mod in [
         config_loader_module, backup_manager_module, permissions_module,
         avatar_router_module, executor_module, memory_module,
-        llm_module, tts_module, stt_module, event_bus_module
+        llm_module, tts_module, stt_module, event_bus_module, websocket_module
     ]:
         mod.on_event(garbage_event)  # must not raise
 

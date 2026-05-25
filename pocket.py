@@ -52,9 +52,7 @@ from core.stt import (
     init_whisper,
     keyboard_listener,
 )
-from core.websocket_server import (
-    start_avatar_connection,
-)
+from core.websocket_server import websocket_module
 from core.llm import (
     session_history,
     handle_user_input_sync,
@@ -185,7 +183,7 @@ def main():
 
     bootstrap_knowledge()
     init_whisper()
-    start_avatar_connection()
+    websocket_module.start()
 
     # TTS worker thread
     tts_thread = threading.Thread(target=tts_worker, daemon=True)
