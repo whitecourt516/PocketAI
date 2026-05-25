@@ -215,6 +215,59 @@ try:
 except Exception as e:
     print(f"  ❌ State Manager failed: {e}")
 
+    # --- 4q: Event Bus ---
+print("\n[4q] Event Bus")
+try:
+    from core.event_bus import bus, event_bus_module
+
+    received = []
+
+    def handler_a(event):
+        received.append(("a", event))
+
+    def handler_b(event):
+        received.append(("b", event))
+
+    # Subscribe and emit
+    bus.subscribe("test.event", handler_a)
+    bus.subscribe("test.event", handler_b)
+    bus.emit("test.event", {"value": 42})
+
+    assert len(received) == 2, f"Expected 2 handlers called, got {len(received)}"
+    assert received[0] == ("a", {"type": "test.event", "value": 42})
+    assert received[1] == ("b", {"type": "test.event", "value": 42})
+
+    # Unsubscribe
+    bus.unsubscribe("test.event", handler_a)
+    received.clear()
+    bus.emit("test.event", {"value": 99})
+    assert len(received) == 1, "handler_a should be gone"
+    assert received[0][0] == "b"
+
+    # Failing handler doesn't crash the bus
+    def bad_handler(event):
+        raise RuntimeError("intentional failure")
+
+    bus.subscribe("test.event", bad_handler)
+    received.clear()
+    bus.emit("test.event", {})  # bad_handler fires, logs, handler_b still runs
+    assert len(received) == 1, "handler_b should still run after bad_handler fails"
+
+    # Emit with no subscribers doesn't crash
+    bus.emit("event.with.no.subscribers", {"data": "ignored"})
+
+    # Cleanup test subscriptions
+    bus.unsubscribe_all("test.event")
+
+    # Health check
+    assert event_bus_module.health_check()
+
+    print("  ✅ Event Bus — all checks passed")
+    print(bus)
+
+except Exception as e:
+    print(f"  ❌ Event Bus failed: {e}")
+
 # ── All module instances exist ────────────────────────────────────────────────
 def test_module_instances():
     from core.pocket_module      import PocketModule
@@ -223,6 +276,7 @@ def test_module_instances():
     from core.permissions        import permissions_module
     from core.avatar_router      import avatar_router_module
     from core.executor           import executor_module
+    from core.event_bus          import event_bus_module
 
     for mod in [
         config_loader_module,
@@ -230,6 +284,7 @@ def test_module_instances():
         permissions_module,
         avatar_router_module,
         executor_module,
+        event_bus_module,
     ]:
         assert isinstance(mod, PocketModule), f"{mod} is not a PocketModule"
 
@@ -328,13 +383,14 @@ def test_on_event_safety():
     from core.llm            import llm_module
     from core.tts            import tts_module
     from core.stt            import stt_module
+    from core.event_bus     import event_bus_module
 
     garbage_event = {"type": "totally.unknown.event", "payload": "nonsense"}
 
     for mod in [
         config_loader_module, backup_manager_module, permissions_module,
         avatar_router_module, executor_module, memory_module,
-        llm_module, tts_module, stt_module,
+        llm_module, tts_module, stt_module, event_bus_module
     ]:
         mod.on_event(garbage_event)  # must not raise
 
