@@ -17,6 +17,7 @@ import re
 from core.websocket_server import websocket_module
 from core.pocket_module import PocketModule
 from core.state_manager import state
+from core.logger import log
 
 # ── Load expression rules ─────────────────────────────────────────────────────
 _core_dir         = os.path.dirname(os.path.abspath(__file__))
@@ -84,6 +85,7 @@ def send_to_avatar(response_text: str):
 
     websocket_module.send({"type": "expression", "value": emotion})
     state.set_expression(emotion, "avatar_router")
+    log.expression(emotion, "avatar_router")
 
     if content_type == "subtitle":
         duration = max(3000, len(response_text) * 60)

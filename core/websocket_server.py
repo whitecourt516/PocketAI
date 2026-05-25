@@ -27,6 +27,7 @@ from core.pocket_module import PocketModule
 from core.state_manager import state
 from core.event_bus import bus
 from core.config_loader import CFG
+from core.logger import log
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -114,6 +115,7 @@ class WebSocketModule(PocketModule):
             return True
         except Exception as e:
             print(f"  [WebSocket] send failed: {e}")
+            log.error("websocket", f"send failed: {e}")
             return False
 
     # ------------------------------------------------------------------

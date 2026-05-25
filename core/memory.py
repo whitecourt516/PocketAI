@@ -14,6 +14,7 @@ import chromadb
 
 from config.settings import COLLECTION_NAME, N_MEMORIES, KNOWLEDGE_FILES
 from core.pocket_module import PocketModule
+from core.logger import log
 
 # ── ChromaDB client ───────────────────────────────────────────────────────────
 project_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
@@ -43,8 +44,10 @@ def get_relevant_memories(query: str) -> str:
         if not results["documents"][0]:
             return ""
         mems = "\n".join(results["documents"][0])
+        log.memory_retrieval(query, len(results["documents"][0]))
         return f"--- Relevant memories ---\n{mems}\n---"
-    except Exception:
+    except Exception as e:
+        log.error("memory", str(e))
         return ""
 
 

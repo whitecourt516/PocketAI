@@ -53,6 +53,7 @@ from core.stt import (
     keyboard_listener,
 )
 from core.websocket_server import websocket_module
+from core.logger import log, logger_module
 from core.llm import (
     session_history,
     handle_user_input_sync,
@@ -66,6 +67,10 @@ from core.config_loader import is_read_allowed
 from core.executor import execute_command
 
 from core.backup_manager import restore_latest_backup
+
+from core.event_bus import bus
+
+from core.logger import log, logger_module
 # ═════════════════════════════════════════════════════════════════════════════
 # CLI — text input loop
 # ═════════════════════════════════════════════════════════════════════════════
@@ -79,6 +84,7 @@ def cli_input_loop():
             user_input = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\n  [Pocket signing off. Later user.]\n")
+            log.info("pocket", "Pocket signing off")
             os._exit(0)
 
         if not user_input:
@@ -86,6 +92,7 @@ def cli_input_loop():
 
         if user_input.lower() in ("/quit", "quit", "exit", "bye"):
             print("\n  [Pocket signing off. Later user.]\n")
+            log.info("pocket", "Pocket signing off")
             os._exit(0)
 
         if user_input.lower() == "/clear":
@@ -181,9 +188,17 @@ def main():
     print("║   Pocket is online. Hey user.   ║")
     print("╚══════════════════════════════════╝\n")
 
+    logger_module.start()
+    log.info("pocket", "Pocket starting up")
+
     bootstrap_knowledge()
     init_whisper()
     websocket_module.start()
+
+    bus.subscribe("connection.websocket.connected",    logger_module.on_event)
+    bus.subscribe("connection.websocket.disconnected", logger_module.on_event)
+    bus.subscribe("connection.websocket.reconnecting", logger_module.on_event)
+    bus.subscribe("connection.websocket.degraded",     logger_module.on_event)
 
     # TTS worker thread
     tts_thread = threading.Thread(target=tts_worker, daemon=True)

@@ -319,6 +319,43 @@ try:
 except Exception as e:
     print(f"  ❌ WebSocket reconnection engine failed: {e}")
 
+# --- 4i: Structured Logging ---
+print("\n[4i] Structured Logging")
+try:
+    import json
+    import os
+    from core.logger import log, logger_module
+
+    logger_module.start()
+    assert logger_module.health_check(), "Logger health check failed"
+
+    # Write one of each type
+    log.command("echo smoke_test", approved=True, result="smoke_test")
+    log.expression("happy", source="smoke_test")
+    log.memory_retrieval(query="smoke test query", results=3)
+    log.websocket("CONNECTED", attempt=0)
+    log.error("smoke_test", "intentional test error entry")
+    log.info("smoke_test", "4i smoke test complete")
+
+    # Confirm entries landed in the file
+    assert os.path.exists(log._log_path), "Log file not created"
+    with open(log._log_path, "r", encoding="utf-8") as f:
+        lines = [l.strip() for l in f.readlines() if l.strip()]
+
+    assert len(lines) > 0, "Log file is empty"
+
+    # Confirm last entry is valid JSON with required fields
+    last = json.loads(lines[-1])
+    assert "ts" in last, "Missing timestamp"
+    assert "type" in last, "Missing type field"
+
+    print(f"  Log file: {log._log_path}")
+    print(f"  Entries in file: {len(lines)}")
+    print("  ✅ Structured logging — all checks passed")
+
+except Exception as e:
+    print(f"  ❌ Structured logging failed: {e}")
+    
 # ── All module instances exist ────────────────────────────────────────────────
 def test_module_instances():
     from core.pocket_module      import PocketModule

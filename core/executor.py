@@ -14,6 +14,7 @@ import subprocess
 from core.permissions import propose_action, record_outcome
 from core.config_loader import CFG
 from core.pocket_module import PocketModule
+from core.logger import log
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -26,6 +27,7 @@ def execute_command(command: str) -> str:
     approved = propose_action(description, command)
 
     if not approved:
+        log.command(command, approved=False)
         return "[Execution cancelled]"
 
     try:
@@ -44,16 +46,20 @@ def execute_command(command: str) -> str:
         )
 
         record_outcome(command, output[:1000])
+        log.command(command, approved=True, result=output)
         return output
 
     except subprocess.TimeoutExpired:
         outcome = "[Command timed out]"
         record_outcome(command, outcome)
+        log.command(command, approved=True, result=outcome)
         return outcome
 
     except Exception as e:
         outcome = f"[Execution error: {e}]"
         record_outcome(command, outcome)
+        log.command(command, approved=True, result=outcome)
+        log.error("executor", outcome)
         return outcome
 
 
