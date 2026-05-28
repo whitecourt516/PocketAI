@@ -63,6 +63,7 @@ from core.llm import (
 )
 from core.avatar_router import send_to_avatar
 from core.health_check import run_startup_checks
+from core.monitor import create_monitor
 
 from pathlib import Path
 
@@ -75,6 +76,9 @@ from core.backup_manager import restore_latest_backup
 from core.event_bus import bus
 
 from core.logger import log, logger_module
+
+monitor = None  # set in main(), read in cli_input_loop() for cleanup
+
 # ═════════════════════════════════════════════════════════════════════════════
 # CLI — text input loop
 # ═════════════════════════════════════════════════════════════════════════════
@@ -87,6 +91,8 @@ def cli_input_loop():
         try:
             user_input = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
+            if monitor:
+                monitor.stop()
             print("\n  [Pocket signing off. Later user.]\n")
             log.info("pocket", "Pocket signing off")
             os._exit(0)
@@ -95,6 +101,8 @@ def cli_input_loop():
             continue
 
         if user_input.lower() in ("/quit", "quit", "exit", "bye"):
+            if monitor:
+                monitor.stop()
             print("\n  [Pocket signing off. Later user.]\n")
             log.info("pocket", "Pocket signing off")
             os._exit(0)
@@ -223,6 +231,11 @@ def main():
     }
     if not run_startup_checks(modules, send_to_avatar):
         sys.exit(1)
+
+    # Continuous self-monitoring (Stage 4j.1)
+    global monitor
+    monitor = create_monitor(modules, send_to_avatar_fn=send_to_avatar)
+    monitor.start()
 
     # CLI runs on main thread
     cli_input_loop()
