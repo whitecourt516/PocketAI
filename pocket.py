@@ -38,6 +38,7 @@ from config.settings import (
 )
 from core.memory import (
     memory,
+    memory_module,
     save_memory,
     get_relevant_memories,
     load_knowledge_file,
@@ -45,6 +46,7 @@ from core.memory import (
 )
 from core.tts import (
     tts_queue,
+    tts_module,
     speaking_flag,
     tts_worker,
 )
@@ -56,9 +58,11 @@ from core.websocket_server import websocket_module
 from core.logger import log, logger_module
 from core.llm import (
     session_history,
+    llm_module,
     handle_user_input_sync,
 )
 from core.avatar_router import send_to_avatar
+from core.health_check import run_startup_checks
 
 from pathlib import Path
 
@@ -209,6 +213,16 @@ def main():
         target=keyboard_listener, args=(handle_user_input_sync,), daemon=True
     )
     kb_thread.start()
+
+    # Startup health checks (Stage 4j)
+    modules = {
+        "llm":    llm_module,
+        "memory": memory_module,
+        "tts":    tts_module,
+        "ws":     websocket_module,
+    }
+    if not run_startup_checks(modules, send_to_avatar):
+        sys.exit(1)
 
     # CLI runs on main thread
     cli_input_loop()
