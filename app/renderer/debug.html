@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Pocket Debug</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 340px;
+      height: 100vh;
+      overflow: hidden;
+      background: transparent;
+      -webkit-app-region: no-drag;
+      user-select: none;
+      font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+    }
+
+    #root {
+      width: 340px;
+      height: 100vh;
+      background: rgba(14, 16, 22, 0.92);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    #header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      -webkit-app-region: drag;
+    }
+
+    #title {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      color: rgba(255,255,255,0.35);
+      text-transform: uppercase;
+    }
+
+    #status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #22c55e;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    #status-dot.stale { background: #f59e0b; animation: none; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    /* ── Body ── */
+    #body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 14px;
+      scrollbar-width: none;
+    }
+    #body::-webkit-scrollbar { display: none; }
+
+    /* ── Section ── */
+    .section {
+      margin-bottom: 12px;
+    }
+
+    .section-label {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      color: rgba(255,255,255,0.25);
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+
+    .section-body {
+      background: rgba(255,255,255,0.04);
+      border-radius: 6px;
+      padding: 7px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    /* ── Row ── */
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .row-key {
+      font-size: 11px;
+      color: rgba(255,255,255,0.35);
+      white-space: nowrap;
+    }
+
+    .row-val {
+      font-size: 11px;
+      color: rgba(255,255,255,0.82);
+      text-align: right;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 180px;
+    }
+
+    .row-val.green  { color: #22c55e; }
+    .row-val.red    { color: #ef4444; }
+    .row-val.yellow { color: #f59e0b; }
+    .row-val.blue   { color: #60a5fa; }
+    .row-val.muted  { color: rgba(255,255,255,0.3); }
+
+    /* ── Health row ── */
+    .health-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 12px;
+    }
+
+    .health-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+    }
+
+    .health-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .health-dot.ok      { background: #22c55e; }
+    .health-dot.fail    { background: #ef4444; }
+    .health-dot.unknown { background: rgba(255,255,255,0.2); }
+
+    .health-name { color: rgba(255,255,255,0.5); }
+    .health-val  { color: rgba(255,255,255,0.82); margin-left: auto; font-size: 10px; }
+
+    /* ── Events ── */
+    .event-row {
+      font-size: 10px;
+      display: flex;
+      gap: 6px;
+      align-items: baseline;
+      line-height: 1.5;
+    }
+
+    .event-type {
+      color: #60a5fa;
+      white-space: nowrap;
+      flex-shrink: 0;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .event-arrow { color: rgba(255,255,255,0.2); flex-shrink: 0; }
+
+    .event-handlers {
+      color: rgba(255,255,255,0.45);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Timestamp ── */
+    #timestamp {
+      padding: 6px 14px 8px;
+      font-size: 9px;
+      color: rgba(255,255,255,0.2);
+      letter-spacing: 0.06em;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+  </style>
+</head>
+<body>
+<div id="root">
+
+  <div id="header">
+    <span id="title">Pocket Debug</span>
+    <div id="status-dot"></div>
+  </div>
+
+  <div id="body">
+
+    <div class="section" id="section-state">
+      <div class="section-label">State</div>
+      <div class="section-body">
+        <div class="row"><span class="row-key">expression</span><span class="row-val" id="val-expression">—</span></div>
+        <div class="row"><span class="row-key">speaking</span>  <span class="row-val" id="val-speaking">—</span></div>
+        <div class="row"><span class="row-key">thinking</span>  <span class="row-val" id="val-thinking">—</span></div>
+        <div class="row"><span class="row-key">source</span>    <span class="row-val muted" id="val-source">—</span></div>
+      </div>
+    </div>
+
+    <div class="section" id="section-conn">
+      <div class="section-label">Connection</div>
+      <div class="section-body">
+        <div class="row"><span class="row-key">websocket</span>  <span class="row-val" id="val-ws">—</span></div>
+        <div class="row"><span class="row-key">reconnects</span> <span class="row-val muted" id="val-reconnects">—</span></div>
+      </div>
+    </div>
+
+    <div class="section" id="section-session">
+      <div class="section-label">Session</div>
+      <div class="section-body">
+        <div class="row"><span class="row-key">voice</span> <span class="row-val" id="val-voice">—</span></div>
+        <div class="row"><span class="row-key">mode</span>  <span class="row-val blue" id="val-mode">—</span></div>
+        <div class="row"><span class="row-key">query</span> <span class="row-val muted" id="val-query">—</span></div>
+      </div>
+    </div>
+
+    <div class="section" id="section-health">
+      <div class="section-label">Health</div>
+      <div class="section-body">
+        <div class="health-grid">
+          <div class="health-item"><div class="health-dot unknown" id="dot-ollama"></div><span class="health-name">ollama</span></div>
+          <div class="health-item"><div class="health-dot unknown" id="dot-chroma"></div><span class="health-name">chroma</span></div>
+          <div class="health-item"><div class="health-dot unknown" id="dot-piper"></div> <span class="health-name">piper</span></div>
+          <div class="health-item"><div class="health-dot unknown" id="dot-websocket"></div><span class="health-name">websocket</span></div>
+        </div>
+        <div class="row" style="margin-top:4px"><span class="row-key">last checked</span><span class="row-val muted" id="val-checked">—</span></div>
+      </div>
+    </div>
+
+    <div class="section" id="section-events">
+      <div class="section-label">Event subscriptions</div>
+      <div class="section-body" id="events-body">
+        <span style="font-size:10px;color:rgba(255,255,255,0.2)">none registered</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="timestamp">not yet updated</div>
+
+</div>
+
+<script>
+function dot(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'health-dot ' + (value === true ? 'ok' : value === false ? 'fail' : 'unknown');
+}
+
+function val(id, text, colorClass) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text ?? '—';
+  if (colorClass) {
+    el.className = 'row-val ' + colorClass;
+  }
+}
+
+function wsColor(status) {
+  if (status === 'CONNECTED') return 'green';
+  if (status === 'DISCONNECTED' || status === 'DEGRADED_MODE') return 'red';
+  return 'yellow';
+}
+
+function applyState(data) {
+  const av = data.avatar   || {};
+  const cn = data.connection || {};
+  const se = data.session  || {};
+  const hl = data.health   || {};
+
+  val('val-expression', av.expression);
+  val('val-speaking',   String(av.speaking),  av.speaking  ? 'yellow' : 'muted');
+  val('val-thinking',   String(av.thinking),  av.thinking  ? 'blue'   : 'muted');
+  val('val-source',     av.expression_source || 'none', 'muted');
+
+  val('val-ws',         cn.websocket,   wsColor(cn.websocket));
+  val('val-reconnects', String(cn.reconnect_attempts ?? 0), 'muted');
+
+  val('val-voice', String(se.voice_active), se.voice_active ? 'green' : 'muted');
+  val('val-mode',  se.skill_mode || '—', 'blue');
+  const q = se.current_query;
+  val('val-query', q ? String(q).slice(0, 36) + (q.length > 36 ? '…' : '') : 'none', 'muted');
+
+  dot('dot-ollama',    hl.ollama);
+  dot('dot-chroma',    hl.chroma);
+  dot('dot-piper',     hl.piper);
+  dot('dot-websocket', hl.websocket);
+  val('val-checked',   hl.last_checked_at ? hl.last_checked_at.slice(11, 19) : '—', 'muted');
+
+  // Events
+  const eventsBody = document.getElementById('events-body');
+  const events = data.events || [];
+  if (events.length === 0) {
+    eventsBody.innerHTML = '<span style="font-size:10px;color:rgba(255,255,255,0.2)">none registered</span>';
+  } else {
+    eventsBody.innerHTML = events.map(e =>
+      `<div class="event-row">
+        <span class="event-type">${e.type}</span>
+        <span class="event-arrow">→</span>
+        <span class="event-handlers">${e.handlers}</span>
+      </div>`
+    ).join('');
+  }
+
+  document.getElementById('timestamp').textContent =
+    'updated ' + new Date().toLocaleTimeString();
+  document.getElementById('status-dot').className = 'status-dot';
+}
+
+if (window.pocket) {
+  window.pocket.onDebugState((data) => applyState(data));
+}
+
+console.log('[Pocket] Debug panel ready');
+</script>
+</body>
+</html>

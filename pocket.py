@@ -64,6 +64,7 @@ from core.llm import (
 from core.avatar_router import send_to_avatar
 from core.health_check import run_startup_checks
 from core.monitor import create_monitor
+from core.debug_overlay import DebugOverlay
 
 from pathlib import Path
 
@@ -78,6 +79,32 @@ from core.event_bus import bus
 from core.logger import log, logger_module
 
 monitor = None  # set in main(), read in cli_input_loop() for cleanup
+overlay = None  # set in main(), read in cli_input_loop() for cleanup
+
+def altd_listener():
+    """Alt+D hotkey — prints a one-shot debug overlay snapshot."""
+    from pynput import keyboard
+    alt_held = False
+
+    def on_press(key):
+        nonlocal alt_held
+        if key in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r):
+            alt_held = True
+        elif alt_held and hasattr(key, 'char') and key.char == 'd':
+            if overlay:
+                overlay.toggle_live()
+
+    def on_release(key):
+        nonlocal alt_held
+        if key in (keyboard.Key.alt, keyboard.Key.alt_l, keyboard.Key.alt_r):
+            alt_held = False
+
+    try:
+        with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+            listener.join()
+    except Exception as e:
+        print(f"  [Alt+D listener error: {e}]")
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # CLI — text input loop
@@ -91,6 +118,8 @@ def cli_input_loop():
         try:
             user_input = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
+            if overlay:
+                overlay.stop()
             if monitor:
                 monitor.stop()
             print("\n  [Pocket signing off. Later user.]\n")
@@ -101,6 +130,8 @@ def cli_input_loop():
             continue
 
         if user_input.lower() in ("/quit", "quit", "exit", "bye"):
+            if overlay:
+                overlay.stop()
             if monitor:
                 monitor.stop()
             print("\n  [Pocket signing off. Later user.]\n")
@@ -236,6 +267,14 @@ def main():
     global monitor
     monitor = create_monitor(modules, send_to_avatar_fn=send_to_avatar)
     monitor.start()
+
+    # Runtime debug overlay (Stage 4t)
+    global overlay
+    overlay = DebugOverlay(send_to_avatar_fn=websocket_module.send)
+
+    # Alt+D hotkey thread
+    altd_thread = threading.Thread(target=altd_listener, daemon=True)
+    altd_thread.start()
 
     # CLI runs on main thread
     cli_input_loop()

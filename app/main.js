@@ -21,6 +21,12 @@ const CONFIG = {
     corner: 'bottom-right',   // options: bottom-right, bottom-left, top-right, top-left
     margin: 20,
   },
+  debugPanel: {
+    width: 340,
+    height: 520,
+    corner: 'bottom-left',   // opposite side from output panel
+    margin: 20,
+  },
   wandering: {
     enabled: true,
     intervalMs: 8000,          // how often to pick a new spot (ms)
@@ -39,6 +45,8 @@ const CONFIG = {
 // ── State ─────────────────────────────────────────────────────────────────────
 let avatarWindow = null;
 let outputPanelWindow = null;
+let debugPanelWindow = null;
+let debugPanelVisible = false;
 let wss = null;
 let wanderTimer = null;
 let avatarVisible = true;
@@ -129,6 +137,42 @@ function createOutputPanel() {
   outputPanelWindow.loadFile('renderer/panel.html');
 }
 
+// ── Debug Panel Window ────────────────────────────────────────────────────────
+function createDebugPanel() {
+  const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
+  const { width, height, corner, margin } = CONFIG.debugPanel;
+
+  let x, y;
+  switch (corner) {
+    case 'bottom-right': x = sw - width - margin;  y = sh - height - margin; break;
+    case 'bottom-left':  x = margin;                y = sh - height - margin; break;
+    case 'top-right':    x = sw - width - margin;  y = margin;               break;
+    case 'top-left':     x = margin;                y = margin;               break;
+    default:             x = margin;                y = sh - height - margin;
+  }
+
+  debugPanelWindow = new BrowserWindow({
+    width,
+    height,
+    x,
+    y,
+    transparent: true,
+    frame: false,
+    hasShadow: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  debugPanelWindow.loadFile('renderer/debug.html');
+}
+
 // ── Wandering Logic ───────────────────────────────────────────────────────────
 function startWandering() {
   if (!CONFIG.wandering.enabled) return;
@@ -203,7 +247,9 @@ function startWebSocketServer() {
 function handleCommand(msg) {
   if (!avatarWindow || avatarWindow.isDestroyed()) return;
 
-  switch (msg.type) {
+  const msgType = msg.type || msg.command;
+
+  switch (msgType) {
 
     // Change the otter's expression
     case 'expression':
@@ -247,6 +293,17 @@ function handleCommand(msg) {
       resumeWandering();
       break;
 
+    // Show debug state in debug panel
+    case 'debug':
+      if (debugPanelWindow && !debugPanelWindow.isDestroyed()) {
+        debugPanelWindow.webContents.send('debug-state', msg.state);
+        if (!debugPanelVisible) {
+          debugPanelWindow.show();
+          debugPanelVisible = true;
+        }
+      }
+      break;
+
     default:
       console.log('[Pocket] Unknown command type:', msg.type);
   }
@@ -276,6 +333,17 @@ function registerHotkeys() {
       outputPanelWindow.show();
     }
   });
+
+  // Alt+D — toggle debug panel
+  globalShortcut.register('Alt+D', () => {
+    if (!debugPanelWindow || debugPanelWindow.isDestroyed()) return;
+    debugPanelVisible = !debugPanelVisible;
+    if (debugPanelVisible) {
+      debugPanelWindow.show();
+    } else {
+      debugPanelWindow.hide();
+    }
+  });
 }
 
 // ── IPC from renderer ─────────────────────────────────────────────────────────
@@ -289,6 +357,7 @@ ipcMain.on('close-panel', () => {
 app.whenReady().then(() => {
   createAvatarWindow();
   createOutputPanel();
+  createDebugPanel();
   startWebSocketServer();
   registerHotkeys();
 
