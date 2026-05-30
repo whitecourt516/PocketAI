@@ -142,6 +142,54 @@ def test_read_command():
 
 check("/read loads allowed files + blocks denylist", test_read_command)
 
+# ── Web search (4h) ───────────────────────────────────────────────────────────
+# Tests the plumbing WITHOUT a live Tavily call — a real search costs a credit
+# and needs internet. The live round-trip is the manual skip below.
+def test_web_search():
+    from core import web_search
+    from core.web_search import search, format_for_llm, web_search_module
+    from core.pocket_module import PocketModule
+
+    # Module instance honors the lifecycle contract
+    assert isinstance(web_search_module, PocketModule), "web_search_module is not a PocketModule"
+
+    # Empty query short-circuits before any consent prompt or network call
+    empty = search("", require_approval=False)
+    assert empty["ok"] is False, "empty query should return ok=False"
+    assert empty["error"] == "empty query", f"unexpected error: {empty['error']}"
+
+    # format_for_llm on a failed result
+    failed_text = format_for_llm({"ok": False, "query": "x", "results": [],
+                                  "answer": None, "error": "nope"})
+    assert "web search failed" in failed_text, "failed result not formatted"
+
+    # format_for_llm on a successful result renders answer, title, url
+    fake = {
+        "ok": True,
+        "query": "test",
+        "results": [{"title": "Example", "url": "https://example.com",
+                     "content": "Some snippet"}],
+        "answer": "A summary",
+        "error": None,
+    }
+    text = format_for_llm(fake)
+    assert "Example" in text and "https://example.com" in text, "result not rendered"
+    assert "A summary" in text, "answer not rendered"
+
+    # health_check is deterministic and makes NO network call — it only reflects
+    # whether the active backend is configured.
+    if web_search.BACKEND == "tavily":
+        assert web_search_module.health_check() == bool(os.getenv("TAVILY_API_KEY")), \
+            "tavily health_check should match whether TAVILY_API_KEY is set"
+
+check("Web search plumbing (no live call)", test_web_search)
+
+
+# ── Live web search (manual) ──────────────────────────────────────────────────
+if os.getenv("TAVILY_API_KEY"):
+    skip("Live web search", "costs a Tavily credit + needs internet — run /search manually")
+else:
+    skip("Live web search", "TAVILY_API_KEY not set — add it to .env to enable web search")
 
 # ── Executor ──────────────────────────────────────────────────────────────────
 skip("Executor", "requires interactive approval — tested manually")
@@ -366,6 +414,7 @@ def test_module_instances():
     from core.executor           import executor_module
     from core.event_bus          import event_bus_module
     from core.websocket_server   import websocket_module
+    from core.web_search        import web_search_module
 
     for mod in [
         config_loader_module,
@@ -375,6 +424,7 @@ def test_module_instances():
         executor_module,
         event_bus_module,
         websocket_module,
+        web_search_module,
     ]:
         assert isinstance(mod, PocketModule), f"{mod} is not a PocketModule"
 
@@ -475,13 +525,14 @@ def test_on_event_safety():
     from core.stt            import stt_module
     from core.event_bus      import event_bus_module
     from core.websocket_server import websocket_module
+    from core.web_search       import web_search_module
 
     garbage_event = {"type": "totally.unknown.event", "payload": "nonsense"}
 
     for mod in [
         config_loader_module, backup_manager_module, permissions_module,
         avatar_router_module, executor_module, memory_module,
-        llm_module, tts_module, stt_module, event_bus_module, websocket_module
+        llm_module, tts_module, stt_module, event_bus_module, websocket_module, web_search_module
     ]:
         mod.on_event(garbage_event)  # must not raise
 

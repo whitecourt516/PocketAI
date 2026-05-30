@@ -65,19 +65,14 @@ from core.avatar_router import send_to_avatar
 from core.health_check import run_startup_checks
 from core.monitor import create_monitor
 from core.debug_overlay import DebugOverlay
-
 from pathlib import Path
-
 from core.config_loader import is_read_allowed
-
 from core.executor import execute_command
-
 from core.backup_manager import restore_latest_backup
-
 from core.event_bus import bus
 from core.degradation import on_websocket_degraded, on_websocket_connected
-
 from core.logger import log, logger_module
+from core.web_search import search, format_for_llm
 
 monitor = None  # set in main(), read in cli_input_loop() for cleanup
 overlay = None  # set in main(), read in cli_input_loop() for cleanup
@@ -113,7 +108,7 @@ def altd_listener():
 
 def cli_input_loop():
     print("\nType a message or hold F9 to speak.")
-    print("Commands: /quit  /clear  /memory  /load <file>  /read <file>\n")
+    print("Commands: /quit  /clear  /memory  /load <file>  /read <file>  /search <query>\n")
 
     while True:
         try:
@@ -180,7 +175,28 @@ def cli_input_loop():
                 print(f"  [/read error: {e}]\n")
 
             continue
+        if user_input.lower().startswith("/search "):
+            query = user_input[8:].strip()
 
+            if not query:
+                print("  [/search requires a query]\n")
+                continue
+
+            print(f"  [Searching the web for: {query}]\n")
+
+            # user typed this himself — his invocation is the approval.
+            result = search(query, require_approval=False)
+
+            if not result["ok"]:
+                print(f"  [/search failed: {result['error']}]\n")
+                continue
+
+            handle_user_input_sync(
+                f"I searched the web for: {query}\n\n"
+                f"Here are the results:\n\n{format_for_llm(result)}"
+            )
+
+            continue
 
         if user_input.lower().startswith("/exec "):
             command = user_input[6:].strip()

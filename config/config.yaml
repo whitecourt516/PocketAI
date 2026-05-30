@@ -36,6 +36,14 @@ avatar:
   websocket_url: "ws://localhost:7845"
   max_subtitle_len: 120
 
+web_search:
+  backend: "tavily"          # tavily | searxng
+  max_results: 5
+  search_depth: "basic"      # basic = 1 credit, advanced = 2 credits
+  max_content_chars: 500     # per-result content truncation before sending to the LLM
+  # TAVILY_API_KEY lives in .env — never commit it here
+  # searxng_url: "http://localhost:8080"   # used when backend: searxng (Stage 6/7)
+
 security:
   # Paths /read is NOT allowed to access (relative to project root)
   read_denylist:
