@@ -15,10 +15,10 @@ Nothing is done automatically beyond alerting. Pocket reports, user decides.
 import threading
 import time
 import logging
-from datetime import datetime
 from typing import Optional, Callable
 
 from core.state_manager import state
+from core.degradation import mark_degraded, mark_recovered
 
 logger = logging.getLogger(__name__)
 
@@ -149,33 +149,10 @@ class ServiceMonitor:
     # ─── Alert handlers ───────────────────────────────────────────────────────
 
     def _on_degraded(self, service_name: str) -> None:
-        """Called when a service transitions healthy → unhealthy."""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        print(f"\n  ⚠️  [{timestamp}] {service_name} became unavailable mid-session")
-        logger.warning(f"[monitor] {service_name} degraded")
-        self._alert_avatar("concerned", f"{service_name} unavailable")
+        mark_degraded(service_name)
 
     def _on_recovered(self, service_name: str) -> None:
-        """Called when a service transitions unhealthy → healthy."""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        print(f"\n  ✅  [{timestamp}] {service_name} recovered")
-        logger.info(f"[monitor] {service_name} recovered")
-        self._alert_avatar("happy", f"{service_name} recovered")
-
-    def _alert_avatar(self, expression: str, reason: str) -> None:
-        """Send an expression change + alert event to the Electron avatar."""
-        if self._send_to_avatar is None:
-            return
-        try:
-            self._send_to_avatar({
-                "command":    "set_expression",
-                "expression": expression,
-                "source":     "monitor",
-                "reason":     reason,
-            })
-        except Exception as exc:
-            logger.debug(f"[monitor] Avatar alert failed: {exc}")
-            # Never let avatar failures bubble up into the monitor thread
+        mark_recovered(service_name)
 
 
 # ─── Convenience factory ──────────────────────────────────────────────────────

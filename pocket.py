@@ -75,6 +75,7 @@ from core.executor import execute_command
 from core.backup_manager import restore_latest_backup
 
 from core.event_bus import bus
+from core.degradation import on_websocket_degraded, on_websocket_connected
 
 from core.logger import log, logger_module
 
@@ -242,6 +243,9 @@ def main():
     bus.subscribe("connection.websocket.disconnected", logger_module.on_event)
     bus.subscribe("connection.websocket.reconnecting", logger_module.on_event)
     bus.subscribe("connection.websocket.degraded",     logger_module.on_event)
+
+    bus.subscribe("connection.websocket.degraded",  on_websocket_degraded)
+    bus.subscribe("connection.websocket.connected", on_websocket_connected)
 
     # TTS worker thread
     tts_thread = threading.Thread(target=tts_worker, daemon=True)

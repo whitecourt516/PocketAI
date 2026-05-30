@@ -413,7 +413,8 @@ class PocketModule:
 
 \---
 
-### 4r — Runtime State Manager
+### ✅4r — Runtime State Manager (COMPLETE)
+
 
 **Priority: Second — everything that follows reads from this**
 
@@ -436,7 +437,8 @@ state = {
 
 \---
 
-### 4q — Event Bus
+### ✅4q — Event Bus (COMPLETE)
+
 
 **Priority: Third — wire up after the contract and state exist**
 
@@ -457,7 +459,7 @@ bus.emit("memory.store", {"content": "...", "tags": \["voice"]})
 
 \---
 
-### 4n — WebSocket Reconnection Engine
+###  ✅4n — WebSocket Reconnection Engine (COMPLETE)
 
 **Priority: REQUIRED before Stage 5 — build on top of 4r**
 
@@ -473,13 +475,14 @@ Not every event should replay on reconnect — current expression and active spe
 
 \---
 
-### 4i — Structured Logging
+### ✅4i — Structured Logging (COMPLETE)
 
 Log commands, approvals, failures, execution results, expression changes, and memory retrievals. Critical for debugging everything that comes after.
 
 \---
 
-### 4j — Startup Health Checks
+### ✅4j — Startup Health Checks (COMPLETE)
+
 
 Replace silent waiting with an explicit health check sequence. Calls `health\_check()` on each module (4s interface) rather than hard-coding per-service checks.
 
@@ -495,7 +498,8 @@ If any check fails, Pocket reports exactly what's wrong and waits rather than st
 
 \---
 
-### 4j.1 — Continuous Self-Monitoring
+### ✅4j.1 — Continuous Self-Monitoring (COMPLETE)
+
 
 Extends startup health checks into the full session. Lightweight background thread monitors:
 
@@ -509,7 +513,8 @@ Surfaces warnings to user when thresholds are crossed. No automatic action — P
 
 \---
 
-### 4t — Runtime Debug Overlay
+### ✅4t — Runtime Debug Overlay (COMPLETE)
+
 
 **Priority: Build right after 4j.1 — 4r does all the work, this just displays it**
 
@@ -984,12 +989,12 @@ Architecture comparison, fine-tune experiments, model evaluation.
 * \[x] Permission layer — propose\_action() gate (Stage 4e)
 * \[x] ChromaDB collection naming convention sketched (Stage 4e.1)
 * \[x] Decision log — logs/decisions.jsonl (Stage 4e.1)
-* \[ ] /read command (Stage 4f) ← NEXT
-* \[ ] Sandboxed code executor (Stage 4g)
-* \[ ] Rollback convention — auto-backup before any file modification (Stage 4g.1)
-* \[ ] Module Lifecycle Contract — start/stop/health interface for all modules (Stage 4s)
-* \[ ] Runtime State Manager — single source of truth for live state (Stage 4r)
-* \[ ] Event Bus — decoupled inter-module messaging (Stage 4q)
+* \[X] /read command (Stage 4f) ← NEXT
+* \[X] Sandboxed code executor (Stage 4g)
+* \[X] Rollback convention — auto-backup before any file modification (Stage 4g.1)
+* \[X] Module Lifecycle Contract — start/stop/health interface for all modules (Stage 4s)
+*  [X] Runtime State Manager — single source of truth for live state (Stage 4r)
+* \[X] Event Bus — decoupled inter-module messaging (Stage 4q)
 * \[ ] WebSocket reconnection engine with state machine (Stage 4n — builds on 4r)
 * \[ ] Avatar command replay policy (Stage 4n)
 * \[ ] Structured logging (Stage 4i)

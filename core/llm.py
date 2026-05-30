@@ -21,6 +21,8 @@ from core.memory import get_relevant_memories, save_memory
 from core.websocket_server import websocket_module
 from core.tts import tts_queue
 from core.pocket_module import PocketModule
+from core.degradation import mark_degraded, mark_recovered
+
 
 # ── Ollama client ─────────────────────────────────────────────────────────────
 ollama_client = ollama.Client(host=os.getenv("OLLAMA_HOST", "http://localhost:11434"))
@@ -51,10 +53,13 @@ def handle_user_input_sync(text: str):
         response = ollama_client.chat(model=MODEL, messages=messages)
         reply    = response["message"]["content"]
     except Exception as e:
-        reply = f"[LLM error: {e}]"
-        print(reply)
+        # Ollama unreachable / errored — degrade gracefully instead of dying.
+        # mark_degraded handles the flag, log, event, and the spoken message.
+        mark_degraded("ollama", str(e))
         websocket_module.send({"type": "wander_resume"})
         return
+
+    mark_recovered("ollama")  # no-op unless Ollama had been down
 
     session_history.append({"role": "user",      "content": text})
     session_history.append({"role": "assistant",  "content": reply})
@@ -68,7 +73,6 @@ def handle_user_input_sync(text: str):
     send_to_avatar(reply)
 
     tts_queue.put(reply)
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # LIFECYCLE — Stage 4s

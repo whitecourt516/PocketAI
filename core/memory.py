@@ -15,6 +15,7 @@ import chromadb
 from config.settings import COLLECTION_NAME, N_MEMORIES, KNOWLEDGE_FILES
 from core.pocket_module import PocketModule
 from core.logger import log
+from core.degradation import mark_degraded, mark_recovered
 
 # ── ChromaDB client ───────────────────────────────────────────────────────────
 project_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
@@ -31,23 +32,27 @@ memory        = chroma_client.get_or_create_collection(name=COLLECTION_NAME)
 def save_memory(role: str, content: str):
     if len(content.strip()) < 20:
         return
-    memory.add(
-        documents=[f"{role}: {content}"],
-        ids=[str(uuid.uuid4())],
-        metadatas=[{"role": role, "timestamp": str(time.time())}]
-    )
+    try:
+        memory.add(
+            documents=[f"{role}: {content}"],
+            ids=[str(uuid.uuid4())],
+            metadatas=[{"role": role, "timestamp": str(time.time())}]
+        )
+    except Exception as e:
+        mark_degraded("chroma", f"save_memory failed: {e}")
 
 
 def get_relevant_memories(query: str) -> str:
     try:
         results = memory.query(query_texts=[query], n_results=N_MEMORIES)
+        mark_recovered("chroma")  # no-op unless Chroma had been down
         if not results["documents"][0]:
             return ""
         mems = "\n".join(results["documents"][0])
         log.memory_retrieval(query, len(results["documents"][0]))
         return f"--- Relevant memories ---\n{mems}\n---"
     except Exception as e:
-        log.error("memory", str(e))
+        mark_degraded("chroma", str(e))
         return ""
 
 

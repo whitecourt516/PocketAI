@@ -23,6 +23,7 @@ import sounddevice as sd
 
 from core.config_loader import CFG
 from core.pocket_module import PocketModule
+from core.degradation import mark_degraded, mark_recovered
 
 # ── Path constants ────────────────────────────────────────────────────────────
 PIPER_EXE    = CFG["tts"]["piper_exe_abs"]
@@ -48,6 +49,7 @@ def run_piper_tts(text: str):
     import subprocess
 
     if not os.path.exists(PIPER_EXE):
+        mark_degraded("piper", f"Piper executable not found: {PIPER_EXE}")
         return
 
     clean = re.sub(r"[*_`#>\-]", "", text)
@@ -67,8 +69,9 @@ def run_piper_tts(text: str):
         audio_array  = np.frombuffer(raw_audio, dtype=np.int16).astype(np.float32) / 32768.0
         sd.play(audio_array, samplerate=22050)
         sd.wait()
+        mark_recovered("piper")  # no-op unless Piper had been down
     except Exception as e:
-        print(f"  [TTS error: {e}]")
+        mark_degraded("piper", str(e))
     finally:
         speaking_flag.clear()
 
