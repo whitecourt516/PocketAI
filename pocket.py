@@ -73,6 +73,7 @@ from core.event_bus import bus
 from core.degradation import on_websocket_degraded, on_websocket_connected
 from core.logger import log, logger_module
 from core.web_search import search, format_for_llm
+from core.file_editor import safe_write
 
 monitor = None  # set in main(), read in cli_input_loop() for cleanup
 overlay = None  # set in main(), read in cli_input_loop() for cleanup
@@ -108,7 +109,7 @@ def altd_listener():
 
 def cli_input_loop():
     print("\nType a message or hold F9 to speak.")
-    print("Commands: /quit  /clear  /memory  /load <file>  /read <file>  /search <query>\n")
+    print("Commands: /quit  /clear  /memory  /load <file>  /read <file>  /search <query>  /edit <file>\n")
 
     while True:
         try:
@@ -173,6 +174,36 @@ def cli_input_loop():
 
             except Exception as e:
                 print(f"  [/read error: {e}]\n")
+
+            continue
+        if user_input.lower().startswith("/edit "):
+            filepath = user_input[6:].strip()
+
+            if not filepath:
+                print("  [/edit requires a filepath]\n")
+                continue
+
+            print(f"  [Editing: {filepath}]")
+            print("  Paste the new file content. End with a line containing only:  END\n")
+
+            lines = []
+            cancelled = False
+            while True:
+                try:
+                    line = input()
+                except (EOFError, KeyboardInterrupt):
+                    cancelled = True
+                    break
+                if line.strip() == "END":
+                    break
+                lines.append(line)
+
+            if cancelled:
+                print("\n  [/edit cancelled]\n")
+                continue
+
+            result = safe_write(filepath, "\n".join(lines))
+            print(f"  {result}\n")
 
             continue
         if user_input.lower().startswith("/search "):

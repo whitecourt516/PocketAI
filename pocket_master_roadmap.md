@@ -2,7 +2,7 @@
 
 **Setup:** Ollama | 10-12GB VRAM | Windows Host | Docker Compose
 **Goal:** A fully local, voice-enabled personal AI companion with persistent memory, screen awareness, code execution, and a visual avatar that grows alongside you.
-**Last updated:** May 17, 2026
+**Last updated:** May 30, 2026
 
 \---
 
@@ -21,14 +21,15 @@
 |Whisper STT|✅ Running|F9 push-to-talk, offline|
 |Piper TTS|✅ Running|Pocket speaks back, fully offline|
 |pocket.py unified engine|✅ Running|Fully modular — core/, config/, tests/|
-|Git repo|✅ Initialized|Stage 4 in progress|
+|Git repo|✅ Initialized|Stage 4 complete|
 |.gitignore|✅ Done|Excludes pycache, .env, chroma\_data, backups, model weights, node\_modules, logs/|
 |requirements.txt|✅ Done|Dependency snapshot committed at Stage 4 start|
 |pocket-identity.md|✅ Done|Canonical identity document, committed to repo|
 |config/config.yaml|✅ Done|Single source of truth for all settings|
 |core/config\_loader.py|✅ Done|Centralized config + .env loader|
 |core/permissions.py|✅ Done|Permission gate + decision log (decisions.jsonl)|
-|tests/smoke\_test.py|✅ Done|All 4 core systems green|
+|core/web\_search.py|✅ Done|Web search (4h) — Tavily backend, pluggable|
+|tests/smoke\_test.py|✅ Done|Full suite green — 19 passed, web search covered|
 
 \---
 
@@ -39,9 +40,9 @@
 |Persistent memory|✅ Done|ChromaDB RAG — working|
 |Voice input/output|✅ Done|Whisper + Piper — working|
 |Avatar / visual interface|✅ Done|Custom Electron app — working|
-|File read/write|✅ Very doable|Write done, /read command next|
-|Sandboxed code execution|✅ Doable|Subprocess + approval gate|
-|Web search|✅ Doable|SearXNG local or Tavily API|
+|File read/write|✅ Done|Write + /read both working|
+|Sandboxed code execution|✅ Done|Subprocess + approval gate (4g)|
+|Web search|✅ Done|Tavily backend, pluggable to SearXNG later|
 |Screen awareness|⚠️ Doable but tricky|Requires multimodal vision model|
 |Proactive suggestions|⚠️ Doable but tricky|Builds on screen awareness|
 |n8n workflow triggers|✅ Doable|Plumbing already in place|
@@ -59,11 +60,11 @@ Stage 2 — Voice (Whisper + Piper)                        ✅ COMPLETE
     ↓
 Stage 3 — Interface \& Avatar (Electron app)               ✅ COMPLETE
     ↓
-Stage 4 — Architecture Hardening + Self-Improvement       ← IN PROGRESS
+Stage 4 — Architecture Hardening + Self-Improvement       ✅ COMPLETE
     ↓
-Stage 4 (cont.) — Event Bus, State Manager, Lifecycle Contract, Debug Overlay (4q–4t)
+Stage 4 (cont.) — Event Bus, State Manager, Lifecycle Contract, Debug Overlay (4q–4t)   ✅ COMPLETE
     ↓
-⛔ HARD STOP — Real Live2D otter model must be in place
+⛔ HARD STOP — Real Live2D otter model must be in place    ← NEXT GATE
     ↓
 Stage 5 — Screen Awareness + Dynamic Behavior
     ↓
@@ -153,9 +154,9 @@ Pocket has a visual identity — an animated otter avatar that lives on user's d
 
 \---
 
-## Stage 4 — Architecture Hardening + Self-Improvement
+## Stage 4 — Architecture Hardening + Self-Improvement ✅ COMPLETE
 
-**Priority: In Progress | Started: May 13, 2026**
+**Completed: May 30, 2026 | Started: May 13, 2026**
 
 ### Session Log
 
@@ -164,6 +165,7 @@ Pocket has a visual identity — an animated otter avatar that lives on user's d
 |2026-05-13|4i.1 — Git init, CHANGELOG.md, requirements.txt, .gitignore / 4l — pocket-identity.md|
 |2026-05-14|4m — Docker backup + recovery strategy / pocket\_backup.bat confirmed clean / orphan volumes removed|
 |2026-05-17|4a — Modular refactor complete (core/memory, tts, stt, websocket\_server, llm, avatar\_router) / 4a.1 — Smoke test suite, all systems green / 4b — Data-driven expression config (config/expressions.json) / 4c — Standardized avatar commands (core/avatar\_router.py) / 4o — TROUBLESHOOTING.md / 4p — config.yaml + .env loader + security denylist + is\_read\_allowed + is\_command\_allowed / 4e — Permission layer + decision log (logs/decisions.jsonl)|
+|2026-05-30|4h — Web search (core/web\_search.py, Tavily backend, pluggable) + /search command + smoke coverage / live end-to-end verified (real answer returned, Tavily credit consumed) / full smoke suite green (19 passed) / remaining Stage 4 tasks (4f, 4g, 4g.1, 4s, 4r, 4q, 4n, 4i, 4j, 4j.1, 4t, 4k) confirmed complete and verified — **Stage 4 closed**|
 
 > \*\*Why this stage was expanded:\*\* The two future-ideas files both identified the same critical point — architectural decisions made here prevent painful rewrites later. Self-improvement capabilities and structural hardening belong together in the same stage. The order below is deliberate — infrastructure and safety rails first, then capability on top of them.
 
@@ -533,7 +535,7 @@ Toggle with a hotkey (e.g. Alt+D). Reads directly from the Runtime State Manager
 
 \---
 
-### 4k — Graceful Degradation
+### ✅4k — Graceful Degradation (COMPLETE)
 
 Wrap core service calls in proper error handling:
 
@@ -546,19 +548,21 @@ Pocket should never silently die. It should always tell you what's wrong.
 
 \---
 
-### 4h — Web Search
+### ✅4h — Web Search (COMPLETE)
 
-Lower priority — useful but not required before Stage 5. Do after the architecture work is solid.
+**Completed: 2026-05-30**
 
-|Option|Notes|
-|-|-|
-|SearXNG|Fully local, self-hosted, no API key|
-|Tavily API \*|Simple, free tier, cloud|
-|requests + BeautifulSoup|Fetch and parse any URL directly|
+Pocket can search the web through a pluggable backend. Tavily is the active backend (cloud, LLM-ready results in one call); the design keeps the backend swappable so a fully-local SearXNG path can drop in later without touching callers.
 
-```bash
-pip install requests beautifulsoup4
-```
+* `core/web\_search.py` — `search(query, require\_approval=True)` + `format\_for\_llm(result)`; backend dispatch via `config.yaml → web\_search.backend`
+* **Tavily backend** — free tier (1,000 credits/mo), key in `.env` as `TAVILY\_API\_KEY`, read via `os.getenv` so the secret never lands in `CFG`
+* **Consent model** — search does NOT route through the shell executor denylist (a query like "how to format a drive" would false-match "format"). It has its own y/n gate for Pocket-initiated searches and logs every call to `decisions.jsonl`
+* `/search <query>` command — user's explicit invocation is the approval (no re-prompt); still logged
+* `health\_check()` verifies the backend is configured **without** a network call (no wasted credits, works offline) — so it is intentionally NOT in `run\_startup\_checks()`; web search is optional and a missing key must not block boot
+* `on\_event` hook for future bus-driven proactive search (Stage 5b) — dormant until something emits `web.search`
+* Smoke test covers plumbing (consent short-circuit, formatting, deterministic health check); live Tavily call left as a manual skip. End-to-end verified live — query returned a full answer, Tavily credit consumed
+
+**SearXNG upgrade path (Stage 6/7):** switch `web\_search.backend` to `searxng` and implement `\_search\_searxng()`. SearXNG returns ranked URLs only, so it also needs a fetch/extract step bolted on — the "fully local" graduation once web search proves its daily value.
 
 ### Bookmark
 
@@ -989,21 +993,21 @@ Architecture comparison, fine-tune experiments, model evaluation.
 * \[x] Permission layer — propose\_action() gate (Stage 4e)
 * \[x] ChromaDB collection naming convention sketched (Stage 4e.1)
 * \[x] Decision log — logs/decisions.jsonl (Stage 4e.1)
-* \[X] /read command (Stage 4f) ← NEXT
+* \[X] /read command (Stage 4f)
 * \[X] Sandboxed code executor (Stage 4g)
 * \[X] Rollback convention — auto-backup before any file modification (Stage 4g.1)
 * \[X] Module Lifecycle Contract — start/stop/health interface for all modules (Stage 4s)
 *  [X] Runtime State Manager — single source of truth for live state (Stage 4r)
 * \[X] Event Bus — decoupled inter-module messaging (Stage 4q)
-* \[ ] WebSocket reconnection engine with state machine (Stage 4n — builds on 4r)
-* \[ ] Avatar command replay policy (Stage 4n)
-* \[ ] Structured logging (Stage 4i)
-* \[ ] Startup health checks — explicit service status on launch (Stage 4j — uses 4s interface)
-* \[ ] Continuous self-monitoring — latency, retrieval quality, WebSocket, expression accuracy (Stage 4j.1 — feeds into 4r)
-* \[ ] Runtime Debug Overlay — live state/event/health view, Alt+D toggle (Stage 4t — reads from 4r)
-* \[ ] Graceful degradation — Pocket reports failures, never silently crashes (Stage 4k)
-* \[ ] Web search — SearXNG or Tavily (Stage 4h)
-* \[ ] Avatar self-modification (expressions, wander config, personality)
+* \[x] WebSocket reconnection engine with state machine (Stage 4n — builds on 4r)
+* \[x] Avatar command replay policy (Stage 4n)
+* \[x] Structured logging (Stage 4i)
+* \[x] Startup health checks — explicit service status on launch (Stage 4j — uses 4s interface)
+* \[x] Continuous self-monitoring — latency, retrieval quality, WebSocket, expression accuracy (Stage 4j.1 — feeds into 4r)
+* \[x] Runtime Debug Overlay — live state/event/health view, Alt+D toggle (Stage 4t — reads from 4r)
+* \[x] Graceful degradation — Pocket reports failures, never silently crashes (Stage 4k)
+* \[x] Web search — Tavily backend, pluggable to SearXNG (Stage 4h)
+* \[ ] Avatar self-modification (expressions, wander config, personality) — hooks exist (4b/4f/4g + rollback); not yet exercised end-to-end
 
 ### Screen \& Context Awareness
 
@@ -1122,5 +1126,5 @@ Core stability always comes first. Future modules plug into Pocket — they don'
 
 \---
 
-*Built May 2026 | Stages 1–3 complete. Stage 4 in progress as of May 19, 2026. Completed this session: 4a, 4a.1, 4b, 4c, 4o, 4p, 4e, 4e.1. Added: 4q (Event Bus), 4r (Runtime State Manager), 4s (Module Lifecycle Contract), 4t (Runtime Debug Overlay). Next: 4f (/read command) → 4n (WebSocket reconnection) → 4q–4t → Live2D gate → Stage 5.*
+*Built May 2026 | Stages 1–4 complete as of May 30, 2026. Stage 4 closed: architecture hardening (4s/4r/4q/4n/4i/4j/4j.1/4t/4k), self-improvement (4f/4g/4g.1), and web search (4h) all done and smoke-tested (19 passed). Next: ⛔ Live2D otter model hard stop → Stage 5 (Screen Awareness). One open item: avatar self-modification — hooks exist (read + executor + rollback), not yet exercised end-to-end.*
 

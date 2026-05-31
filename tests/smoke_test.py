@@ -184,6 +184,20 @@ def test_web_search():
 
 check("Web search plumbing (no live call)", test_web_search)
 
+# ── File editor (self-modification write path) ────────────────────────────────
+def test_file_editor():
+    from core.file_editor import safe_write, file_editor_module
+    from core.pocket_module import PocketModule
+
+    assert isinstance(file_editor_module, PocketModule), "file_editor_module is not a PocketModule"
+
+    # A denylisted write is refused BEFORE any approval prompt — non-interactive.
+    blocked = safe_write(".env", "should never be written")
+    assert "blocked" in blocked.lower(), f"denylisted write not blocked: {blocked}"
+
+check("File editor blocks denylisted writes (no prompt)", test_file_editor)
+
+skip("File editor live write", "requires interactive approval — tested manually via /edit")
 
 # ── Live web search (manual) ──────────────────────────────────────────────────
 if os.getenv("TAVILY_API_KEY"):
@@ -415,7 +429,8 @@ def test_module_instances():
     from core.event_bus          import event_bus_module
     from core.websocket_server   import websocket_module
     from core.web_search        import web_search_module
-
+    from core.file_editor import file_editor_module
+    
     for mod in [
         config_loader_module,
         backup_manager_module,
@@ -425,6 +440,7 @@ def test_module_instances():
         event_bus_module,
         websocket_module,
         web_search_module,
+        file_editor_module
     ]:
         assert isinstance(mod, PocketModule), f"{mod} is not a PocketModule"
 
@@ -526,13 +542,14 @@ def test_on_event_safety():
     from core.event_bus      import event_bus_module
     from core.websocket_server import websocket_module
     from core.web_search       import web_search_module
-
+    from core.file_editor import file_editor_module
+    
     garbage_event = {"type": "totally.unknown.event", "payload": "nonsense"}
 
     for mod in [
         config_loader_module, backup_manager_module, permissions_module,
         avatar_router_module, executor_module, memory_module,
-        llm_module, tts_module, stt_module, event_bus_module, websocket_module, web_search_module
+        llm_module, tts_module, stt_module, event_bus_module, websocket_module, web_search_module, file_editor_module
     ]:
         mod.on_event(garbage_event)  # must not raise
 
