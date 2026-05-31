@@ -1,0 +1,95 @@
+You are performing a strict architecture-to-roadmap audit.
+
+Task:
+1. Read roadmap.md first and extract all stages and intended features.
+2. Then analyze the entire codebase.
+3. Map every implemented feature to roadmap stages.
+4. Identify:
+   - Fully implemented roadmap items
+   - Partially implemented items
+   - Missing items
+   - Features that exist but are NOT in the roadmap
+   - Architectural drift (implementation deviates from design intent)
+
+Output format:
+- Stage-by-stage completion table
+- Missing features list by stage
+- Unexpected/extra systems list
+- High-risk mismatches (most important section)
+
+Be strict, not optimistic.
+
+
+
+Now evaluate the system purely from an architecture standpoint.
+
+Focus on:
+- Module boundaries (are responsibilities cleanly separated?)
+- Data flow correctness (does information move logically through the system?)
+- Circular dependencies or tight coupling
+- Overloaded modules (doing too many jobs)
+- Missing abstraction layers
+- Executor / memory / agent interaction correctness
+
+Output:
+- Architecture diagram (text-based)
+- Critical design flaws
+- Suggested refactor priorities ranked by risk
+- Systems that will cause scaling issues later
+
+Ignore roadmap alignment in this step—focus only on system design quality.
+
+
+
+
+Trace a full execution cycle through the system.
+
+Start from:
+- user input
+- through agent/persona handling
+- memory access
+- decision making
+- executor actions
+- output generation
+
+Show:
+- exact modules involved at each step
+- where data transforms
+- where state is stored or mutated
+- where ambiguity or failure points exist
+
+Then identify:
+- broken or unclear execution paths
+- missing control flow safeguards
+- places where autonomy could misbehave or loop incorrectly
+
+
+
+Now analyze these idea documents as a system design corpus.
+
+Tasks:
+1. Cluster ideas into logical groups (features, infrastructure, autonomy, UI, etc.)
+2. Identify duplicates or near-duplicates
+3. Detect conceptual drift (same idea evolving into conflicting versions)
+4. Flag ideas that are:
+   - premature for current architecture
+   - dependent on missing systems
+   - redundant or already implemented in code
+5. Suggest a clean, reduced idea set
+
+Then:
+Provide a recommended implementation order aligned with system maturity.
+
+
+Now reconcile everything:
+- roadmap
+- actual implementation
+- idea documents
+
+Create a single unified plan:
+- What should be fixed immediately
+- What should be ignored for now
+- What should be implemented next (realistic order)
+- What should be redesigned entirely
+
+Be brutally practical—optimize for system stability, not completeness.

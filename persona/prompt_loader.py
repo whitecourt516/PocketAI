@@ -15,4 +15,11 @@ def load_prompt(filename):
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
-SYSTEM_PROMPT = load_prompt("base_system.md")
+def build_system_prompt() -> str:
+    parts = [
+        load_prompt("base_system.md"),
+        load_prompt("core_identity.md"),
+        load_prompt("authority.md"),
+        load_prompt("memory_principles.md"),
+    ]
+    return "\n\n".join(parts)

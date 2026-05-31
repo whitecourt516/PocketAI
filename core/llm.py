@@ -16,7 +16,7 @@ import os
 import ollama
 
 from config.settings import MODEL
-from persona.prompt_loader import SYSTEM_PROMPT
+from persona.prompt_loader import build_system_prompt
 from core.memory import get_relevant_memories, save_memory
 from core.websocket_server import websocket_module
 from core.tts import tts_queue
@@ -43,7 +43,7 @@ def handle_user_input_sync(text: str):
     websocket_module.send({"type": "wander_pause"})
 
     past        = get_relevant_memories(text)
-    full_system = SYSTEM_PROMPT + (f"\n\n{past}" if past else "")
+    full_system = build_system_prompt() + (f"\n\n{past}" if past else "")
 
     messages = [{"role": "system", "content": full_system}]
     messages += session_history
