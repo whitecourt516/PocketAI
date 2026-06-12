@@ -119,8 +119,10 @@ def cli_input_loop():
                 overlay.stop()
             if monitor:
                 monitor.stop()
-            print("\n  [Pocket signing off. Later user.]\n")
+            websocket_module.stop()
             log.info("pocket", "Pocket signing off")
+            logger_module.stop()    
+            print("\n  [Pocket signing off. Later user.]\n")
             os._exit(0)
 
         if not user_input:
@@ -131,8 +133,10 @@ def cli_input_loop():
                 overlay.stop()
             if monitor:
                 monitor.stop()
-            print("\n  [Pocket signing off. Later user.]\n")
+            websocket_module.stop()
             log.info("pocket", "Pocket signing off")
+            logger_module.stop()
+            print("\n  [Pocket signing off. Later user.]\n")
             os._exit(0)
 
         if user_input.lower() == "/clear":

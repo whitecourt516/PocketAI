@@ -2,19 +2,79 @@
 # Sandboxed shell command executor — every command passes through the
 # permission gate before running.
 #
+# Security model (4.5c):
+#   1. Secret-path check  — file-like args are checked against the read denylist
+#                           before the approval prompt. /exec type .env is blocked
+#                           here, not by the denylist in propose_action().
+#   2. Command denylist   — is_command_allowed() blocks dangerous programs,
+#                           shell metacharacters, and inline-exec combos via
+#                           shlex parsing (not substring matching).
+#   3. Approval gate      — every command that passes (1) and (2) still requires
+#                           user's explicit y/n before execution.
+#   4. Constrained cwd    — subprocess runs from PROJECT_ROOT, not wherever the
+#                           shell inherits. Limits blast radius of relative paths.
+#
+# Backup policy (documented, not enforced):
+#   /exec writes are NOT routed through backup_manager. The executor runs
+#   arbitrary shell commands — reliably intercepting writes inside them is not
+#   feasible without a sandbox. Backup coverage for executor writes relies on
+#   the Docker volume backup (Stage 4m). Do not represent /exec as backed-up.
+#
 # Stage 4s: ExecutorModule implements PocketModule.
-#   start()        — no-op; subprocess is called on demand
-#   stop()         — no-op; no persistent processes or threads
-#   health_check() — verifies the executor denylist is populated in CFG
-#   on_event()     — handles "executor.run" events from the bus (4q)
-#                    Note: bus-driven execution still goes through propose_action()
 
+import os
+import shlex
 import subprocess
+from pathlib import Path
 
 from core.permissions import propose_action, record_outcome
-from core.config_loader import CFG
+from core.config_loader import CFG, is_read_allowed, PROJECT_ROOT
 from core.pocket_module import PocketModule
 from core.logger import log
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# INTERNAL HELPERS
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _check_command_paths(command: str) -> str | None:
+    """
+    Parse command arguments and check file-like tokens against the read denylist.
+
+    Returns a human-readable reason string if any token resolves to a denied
+    path, or None if the command is clear.
+
+    This closes the /exec → .env leak: 'type .env' passes the command denylist
+    (it's not a dangerous program) but is caught here before the approval prompt.
+    """
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return None  # unparseable — denylist check will handle it
+
+    for token in parts[1:]:          # skip the program name
+        if token.startswith("-") or token.startswith("/"):
+            continue                 # skip flags
+
+        candidate = Path(token)
+
+        # Skip bare words that don't look like paths
+        has_sep   = os.sep in token or "/" in token
+        has_dot   = "." in token
+        has_ext   = bool(candidate.suffix)
+        if not (has_sep or has_dot or has_ext):
+            continue
+
+        resolved = (
+            candidate.resolve()
+            if candidate.is_absolute()
+            else (PROJECT_ROOT / candidate).resolve()
+        )
+
+        if not is_read_allowed(str(resolved)):
+            return f"references a denied path: {token}"
+
+    return None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -22,21 +82,31 @@ from core.logger import log
 # ═════════════════════════════════════════════════════════════════════════════
 
 def execute_command(command: str) -> str:
-    description = "Execute shell command"
+    # 1. Secret-path check — before any approval prompt
+    path_block = _check_command_paths(command)
+    if path_block:
+        print(f"\n  [BLOCKED] executor {path_block}")
+        print(f"  Command: {command}\n")
+        log.command(command, approved=False)
+        return f"[Execution blocked: {path_block}]"
 
-    approved = propose_action(description, command)
+    # 2. Denylist + approval gate
+    description = "Execute shell command"
+    approved    = propose_action(description, command)
 
     if not approved:
         log.command(command, approved=False)
         return "[Execution cancelled]"
 
+    # 3. Run in constrained working directory
     try:
         result = subprocess.run(
             command,
             shell=True,
             capture_output=True,
             text=True,
-            timeout=CFG["executor"]["timeout_seconds"]
+            timeout=CFG["executor"]["timeout_seconds"],
+            cwd=str(PROJECT_ROOT),
         )
 
         output = (
@@ -70,19 +140,17 @@ def execute_command(command: str) -> str:
 class ExecutorModule(PocketModule):
     """Lifecycle wrapper for the sandboxed command executor.
 
-    This module is stateless — it calls subprocess on demand and delegates
-    all approval and logging to permissions.py. start() and stop() are
-    no-ops. health_check() confirms the denylist is in place so the executor
-    can never run in an unconstrained state.
-    on_event() handles "executor.run" — still routes through propose_action().
+    Stateless — calls subprocess on demand and delegates all approval and
+    logging to permissions.py. start() and stop() are no-ops.
+    health_check() confirms the denylist is populated so the executor never
+    runs in an unconstrained state.
+    on_event() handles 'executor.run' — still routes through propose_action().
     """
 
     def start(self) -> None:
-        # Stateless — nothing to initialise.
         pass
 
     def stop(self) -> None:
-        # No persistent processes or threads.
         pass
 
     def health_check(self) -> bool:
@@ -97,8 +165,6 @@ class ExecutorModule(PocketModule):
             return False
 
     def on_event(self, event: dict) -> None:
-        # Supported event: {"type": "executor.run", "command": "..."}
-        # Bus-triggered execution still requires user's approval via propose_action().
         if event.get("type") != "executor.run":
             return
         command = event.get("command", "")

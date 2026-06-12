@@ -51,14 +51,25 @@ security:
     - ".env.local"
     - "chroma_data/"
     - "pocket_backups/"
-  # Commands the executor will never run regardless of approval
+
+  # Commands the executor will never run regardless of approval.
+  # Matched against parsed tokens — not raw substrings.
+  # Shell metacharacters (| & ; < > ` ) and inline-exec combos
+  # (python -c, powershell -c, etc.) are blocked in code, not here.
   executor_denylist:
-    - "rm -rf"
-    - "format"
-    - "shutdown"
-    - "diskpart"
-    - "reg delete"
-    - "del /f"
+    - "rm"          # any rm invocation (PowerShell Remove-Item alias on Windows)
+    - "rd /s"       # recursive directory delete
+    - "rmdir /s"    # same
+    - "del /s"      # recursive file delete
+    - "del /f"      # force delete
+    - "format"      # disk format
+    - "diskpart"    # disk partitioning
+    - "bcdedit"     # boot configuration
+    - "cipher /w"   # secure wipe
+    - "shutdown"    # system shutdown
+    - "reboot"      # system reboot
+    - "reg delete"  # registry deletion
+    - "reg add"     # registry modification
 executor:
   timeout_seconds: 15
   max_output_chars: 4000

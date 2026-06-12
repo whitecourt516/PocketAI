@@ -11,6 +11,7 @@
 #   health_check() verifies config loaded and all resolved paths exist.
 
 import os
+import shlex
 import yaml
 from pathlib import Path
 from dotenv import load_dotenv
@@ -67,10 +68,82 @@ def is_read_allowed(filepath: str) -> bool:
     return True
 
 
+# Programs that, combined with an inline-exec flag, allow arbitrary code
+# execution — always blocked regardless of the denylist.
+_DANGEROUS_EXEC_COMBOS = [
+    ("python",     "-c"),
+    ("python3",    "-c"),
+    ("powershell", "-c"),
+    ("powershell", "-command"),
+    ("pwsh",       "-c"),
+    ("pwsh",       "-command"),
+    ("cmd",        "/c"),
+    ("bash",       "-c"),
+    ("sh",         "-c"),
+    ("node",       "-e"),
+    ("ruby",       "-e"),
+    ("perl",       "-e"),
+]
+
+# Shell metacharacters that indicate piping, redirection, or command chaining.
+_SHELL_METACHARS = frozenset("|&;<>`")
+
+
 def is_command_allowed(command: str) -> bool:
-    """Return False if command contains any executor denylist entry."""
-    lower = command.lower()
-    return not any(blocked in lower for blocked in CFG["security"]["executor_denylist"])
+    """
+    Return False if the command should be blocked.
+
+    Checks (in order):
+      1. Shell metacharacters — piping, redirection, chaining always blocked.
+      2. Inline-exec combos  — python -c, powershell -c, etc. always blocked.
+      3. Config denylist     — matched against parsed tokens, not raw substrings,
+                               so spacing and case variations are caught correctly.
+
+    Uses shlex parsing so 'rm  -rf' (extra spaces) and mixed case all match.
+    Returns True (allowed) only if all checks pass.
+    """
+    # 1. Shell metacharacters
+    if any(c in command for c in _SHELL_METACHARS):
+        return False
+
+    # 2. Parse the command — reject anything shlex can't tokenise
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return False
+
+    if not parts:
+        return False
+
+    program = Path(parts[0]).stem.lower()   # basename, no extension
+    tokens  = [p.lower() for p in parts]
+
+    # 3. Inline-exec combos
+    for prog, flag in _DANGEROUS_EXEC_COMBOS:
+        if program == prog and flag in tokens:
+            return False
+
+    # 4. Config denylist — parse each entry and match against tokens
+    for blocked in CFG["security"]["executor_denylist"]:
+        try:
+            blocked_tokens = [p.lower() for p in shlex.split(blocked)]
+        except ValueError:
+            blocked_tokens = [blocked.lower().strip()]
+
+        if not blocked_tokens:
+            continue
+
+        blocked_prog = Path(blocked_tokens[0]).stem.lower()
+
+        # Single-token entry — match on program name
+        if len(blocked_tokens) == 1 and blocked_prog == program:
+            return False
+
+        # Multi-token entry — all tokens must appear in the command
+        if len(blocked_tokens) > 1 and all(bt in tokens for bt in blocked_tokens):
+            return False
+
+    return True
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -86,18 +159,15 @@ class ConfigLoader(PocketModule):
     """
 
     def start(self) -> None:
-        # Config loads at import time — nothing to do here.
         pass
 
     def stop(self) -> None:
-        # No connections or threads to close.
         pass
 
     def health_check(self) -> bool:
         try:
             if not CFG:
                 return False
-            # Verify the three resolved Piper paths exist
             for key in ("piper_exe_abs", "piper_model_abs", "piper_config_abs"):
                 if not Path(CFG["tts"][key]).exists():
                     print(f"  [ConfigLoader] Missing path: {CFG['tts'][key]}")
@@ -108,7 +178,6 @@ class ConfigLoader(PocketModule):
             return False
 
     def on_event(self, event: dict) -> None:
-        # Config loader has no event subscriptions.
         pass
 
 
