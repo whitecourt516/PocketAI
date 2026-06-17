@@ -4,6 +4,7 @@
 # Public API:
 #   session_history              — list of chat turns (mutable, shared state)
 #   handle_user_input_sync(text) — process input, get reply, update everything
+#   turn_manager                 — owns the turn mutex (4.5d)
 #
 # Stage 4s: LLMModule implements PocketModule.
 #   start()        — no-op; Ollama client is lazy (connects on first call)
@@ -12,6 +13,8 @@
 #   on_event()     — handles "llm.query" events from the bus (4q)
 
 import os
+import contextlib
+import threading
 
 import ollama
 
@@ -32,11 +35,75 @@ session_history = []
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# TURN MUTEX — Stage 4.5d
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TurnManager:
+    """Serializes turns. Owns the turn mutex.
+
+    A 'turn' is the full pipeline — memory retrieval → Ollama call →
+    history update → memory write → avatar/TTS dispatch. Only one turn
+    runs at a time, so text, voice, and later proactive/idle triggers
+    can't run concurrent turns that race on the unlocked global
+    session_history or fire overlapping Ollama calls.
+
+    Blocking acquire: a turn that arrives mid-turn WAITS rather than being
+    dropped. (Swap run() to self._lock.acquire(blocking=False) + early
+    return if you'd rather drop overlapping input than queue it.)
+
+    exclusive() exposes the same lock to non-turn work that must not race a
+    live turn — idle memory consolidation (6h.1) acquires this so a
+    background pass can't write mid-turn.
+
+    4.5f: this is the seam the conversation orchestrator extracts into —
+    the lock stays here; the turn body moves out of llm.py.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+
+    def run(self, text: str, persist: bool = True) -> None:
+        with self._lock:
+            _run_turn(text, persist)
+
+    @contextlib.contextmanager
+    def exclusive(self):
+        """Acquire the turn mutex directly for non-turn exclusive work
+        (e.g. idle consolidation). Blocks until any in-flight turn finishes."""
+        with self._lock:
+            yield
+
+
+turn_manager = TurnManager()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # CORE FUNCTIONS (unchanged public API)
 # ═════════════════════════════════════════════════════════════════════════════
 
-def handle_user_input_sync(text: str):
-    """Process user input, get LLM reply, update memory and avatar."""
+def handle_user_input_sync(text: str, persist: bool = True):
+    """Public API. Serialized through the turn mutex.
+
+    persist=True  — normal conversation; user + reply written to ChromaDB.
+    persist=False — context-injection turn (/read, /search): Pocket still
+                    sees the content and responds, and it still joins
+                    session_history so follow-ups work, but neither the
+                    injected blob nor the reply is written to permanent
+                    vector memory. Stops file dumps / web results from
+                    polluting semantic search. This is the seam 5e flips to
+                    tagged-ephemeral storage once a consumer for the tag exists.
+    """
+    turn_manager.run(text, persist)
+
+
+def _run_turn(text: str, persist: bool = True):
+    """The actual turn pipeline. Runs under the turn mutex (see TurnManager).
+
+    Everything from memory retrieval through memory write and dispatch lives
+    here so no two turns can interleave on session_history, and so a future
+    consolidation pass holding turn_manager.exclusive() can't slip between
+    retrieval and write.
+    """
     global session_history
 
     websocket_module.send({"type": "expression", "value": "thinking"})
@@ -54,18 +121,21 @@ def handle_user_input_sync(text: str):
         reply    = response["message"]["content"]
     except Exception as e:
         # Ollama unreachable / errored — degrade gracefully instead of dying.
-        # mark_degraded handles the flag, log, event, and the spoken message.
         mark_degraded("ollama", str(e))
         websocket_module.send({"type": "wander_resume"})
         return
 
     mark_recovered("ollama")  # no-op unless Ollama had been down
 
+    # Injected content joins session_history regardless of persist, so the
+    # next turn can still reference the file/search results in-session.
     session_history.append({"role": "user",      "content": text})
     session_history.append({"role": "assistant",  "content": reply})
 
-    save_memory("user",      text)
-    save_memory("assistant", reply)
+    # ...but only normal turns are committed to permanent vector memory.
+    if persist:
+        save_memory("user",      text)
+        save_memory("assistant", reply)
 
     print(f"\nPocket: {reply}\n")
 
@@ -73,6 +143,7 @@ def handle_user_input_sync(text: str):
     send_to_avatar(reply)
 
     tts_queue.put(reply)
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # LIFECYCLE — Stage 4s

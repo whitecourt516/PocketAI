@@ -6,11 +6,12 @@
 # (cap: 60s, max: 10 attempts), re-syncs avatar state on reconnect.
 #
 # Backoff schedule (seconds): 1, 2, 4, 8, 16, 30, 60, 60, 60, 60 → DEGRADED_MODE
+# A10: DEGRADED_MODE is non-terminal — slow-polls every 60s and recovers.
 #
 # State machine (lives in state_manager, namespace "connection"):
 #   CONNECTED → DISCONNECTED → RECONNECTING → RESYNCING → CONNECTED
 #                                           ↓ (10 failures)
-#                                        DEGRADED_MODE
+#                                        DEGRADED_MODE → (slow-poll) → CONNECTED
 #
 # Stage 4s: WebSocketModule implements PocketModule.
 
@@ -36,6 +37,7 @@ from core.logger import log
 
 BACKOFF_SCHEDULE = [1, 2, 4, 8, 16, 30, 60, 60, 60, 60]  # seconds, 10 attempts
 MAX_ATTEMPTS     = len(BACKOFF_SCHEDULE)
+DEGRADED_RETRY_INTERVAL = 60  # seconds — slow-poll cadence once aggressive backoff is exhausted (A10)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -138,22 +140,22 @@ class WebSocketModule(PocketModule):
         url = CFG.get("avatar", {}).get("websocket_url", "ws://localhost:7845")
 
         while self._running:
-            attempt = state.get("connection", "reconnect_attempts")
+            attempt  = state.get("connection", "reconnect_attempts")
+            degraded = attempt >= MAX_ATTEMPTS
 
-            if attempt >= MAX_ATTEMPTS:
-                # Give up — stay in DEGRADED_MODE until restart
+            if degraded:
+                # Aggressive backoff exhausted. Switch to a slow poll, but KEEP
+                # trying — a relaunched avatar (4.5b) should reconnect on its own
+                # without a Pocket restart. (A10: DEGRADED_MODE is no longer terminal.)
                 if state.websocket_status != "DEGRADED_MODE":
                     state.set_websocket_status("DEGRADED_MODE")
                     bus.emit("connection.websocket.degraded", {
-                        "reason": "Max reconnection attempts reached",
-                        "attempts": attempt
+                        "reason": "Max aggressive attempts reached; slow-polling",
+                        "attempts": attempt,
                     })
-                    print(f"  [WebSocket] DEGRADED_MODE — gave up after {attempt} attempts. Restart Pocket to retry.")
-                await asyncio.sleep(5)  # idle, don't spin
-                continue
-
-            # Set status before attempting
-            if attempt > 0:
+                    print(f"  [WebSocket] DEGRADED_MODE after {attempt} attempts — "
+                          f"slow-polling every {DEGRADED_RETRY_INTERVAL}s until the avatar returns.")
+            elif attempt > 0:
                 state.set_websocket_status("RECONNECTING")
                 bus.emit("connection.websocket.reconnecting", {"attempt": attempt})
 
@@ -162,11 +164,14 @@ class WebSocketModule(PocketModule):
                     with self._lock:
                         self._ws = ws
 
+                    # set_websocket_status("CONNECTED") resets reconnect_attempts to 0,
+                    # so recovery is durable — including recovery straight out of
+                    # DEGRADED_MODE. Next drop starts the backoff schedule fresh.
                     state.set_websocket_status("CONNECTED")
                     bus.emit("connection.websocket.connected", {"attempt": attempt})
 
                     if attempt > 0:
-                        # Reconnect — re-sync avatar state
+                        # Reconnect (or degraded-recovery) — re-sync avatar state.
                         await self._resync()
 
                     print(f"  [WebSocket] Connected to avatar at {url}")
@@ -179,17 +184,29 @@ class WebSocketModule(PocketModule):
                     self._ws = None
 
                 attempts_now = state.increment_reconnect_attempts()
-                state.set_websocket_status("DISCONNECTED")
+
+                # Past the cap, stay in DEGRADED_MODE rather than flapping to
+                # DISCONNECTED — the status should read "slow-polling," not churn.
+                if attempts_now < MAX_ATTEMPTS:
+                    state.set_websocket_status("DISCONNECTED")
+                else:
+                    state.set_websocket_status("DEGRADED_MODE")
+
                 bus.emit("connection.websocket.disconnected", {
                     "reason": str(e),
-                    "attempt": attempts_now
+                    "attempt": attempts_now,
                 })
 
+                # Guard the backoff index — attempts_now climbs past MAX_ATTEMPTS
+                # during slow-poll, so only index the schedule while in range.
                 if attempts_now < MAX_ATTEMPTS:
                     wait = BACKOFF_SCHEDULE[attempts_now - 1]
                     print(f"  [WebSocket] Disconnected ({e}). Retry {attempts_now}/{MAX_ATTEMPTS} in {wait}s...")
-                    await asyncio.sleep(wait)
-                # loop continues — either retries or hits MAX_ATTEMPTS guard above
+                else:
+                    wait = DEGRADED_RETRY_INTERVAL
+                    print(f"  [WebSocket] Disconnected ({e}). DEGRADED — next slow-poll in {wait}s...")
+
+                await asyncio.sleep(wait)
 
     async def _hold(self, ws) -> None:
         """Keep connection alive until it drops or we're told to stop."""

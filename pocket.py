@@ -170,7 +170,8 @@ def cli_input_loop():
                 print(f"  [Loaded: {path} ({len(content)} chars)]\n")
 
                 handle_user_input_sync(
-                    f"I'm showing you this file: {filepath}\n\n```\n{content}\n```"
+                    f"I'm showing you this file: {filepath}\n\n```\n{content}\n```",
+                    persist=False,
                 )
 
             except FileNotFoundError:
@@ -228,7 +229,8 @@ def cli_input_loop():
 
             handle_user_input_sync(
                 f"I searched the web for: {query}\n\n"
-                f"Here are the results:\n\n{format_for_llm(result)}"
+                f"Here are the results:\n\n{format_for_llm(result)}",
+                persist=False,
             )
 
             continue

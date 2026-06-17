@@ -29,7 +29,7 @@ from core.degradation import mark_degraded, mark_recovered
 PIPER_EXE    = CFG["tts"]["piper_exe_abs"]
 PIPER_MODEL  = CFG["tts"]["piper_model_abs"]
 PIPER_CONFIG = CFG["tts"]["piper_config_abs"]
-
+PIPER_TIMEOUT = CFG["tts"].get("timeout_seconds", 30)  # seconds; generous vs long replies
 # ── Shared state ──────────────────────────────────────────────────────────────
 tts_queue     = queue.Queue()
 speaking_flag = threading.Event()
@@ -44,7 +44,9 @@ def run_piper_tts(text: str):
     """Synthesise *text* with Piper and play it through the default output device.
 
     Blocks until playback is complete. Sets/clears *speaking_flag* around
-    playback so other subsystems can check whether audio is active.
+    playback so other subsystems can check whether audio is active. A Piper
+    process that hangs is killed after PIPER_TIMEOUT and the utterance is
+    skipped, so the tts_worker never wedges permanently.
     """
     import subprocess
 
@@ -65,7 +67,13 @@ def run_piper_tts(text: str):
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
         )
-        raw_audio, _ = proc.communicate(input=clean.encode("utf-8"))
+        try:
+            raw_audio, _ = proc.communicate(input=clean.encode("utf-8"), timeout=PIPER_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()  # reap the killed process so it doesn't linger
+            mark_degraded("piper", f"Piper timed out after {PIPER_TIMEOUT}s — utterance skipped")
+            return
         audio_array  = np.frombuffer(raw_audio, dtype=np.int16).astype(np.float32) / 32768.0
         sd.play(audio_array, samplerate=22050)
         sd.wait()
