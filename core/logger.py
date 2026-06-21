@@ -73,10 +73,12 @@ class StructuredLogger:
         line = json.dumps(entry, ensure_ascii=False)
         with self._lock:
             try:
-                self._handler.stream = self._handler._open()
+                if self._handler.shouldRollover(None):
+                    self._handler.doRollover()
+                if self._handler.stream is None:
+                    self._handler.stream = self._handler._open()
                 self._handler.stream.write(line + "\n")
                 self._handler.stream.flush()
-                self._handler.doRollover() if self._handler.shouldRollover(None) else None
             except Exception as e:
                 print(f"  [Logger] write failed: {e}")
 

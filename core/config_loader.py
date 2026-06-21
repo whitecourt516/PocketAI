@@ -31,6 +31,12 @@ load_dotenv(_env_path)
 with open(_config_path, "r", encoding="utf-8") as f:
     CFG: dict = yaml.safe_load(f)
 
+# ── Inject computed project root ──────────────────────────────────────────────
+# PROJECT_ROOT is derived from this file's location, so it's correct regardless
+# of the launch CWD. This overrides any value in config.yaml on purpose — a
+# committed config must not carry a machine-specific absolute path (A3).
+CFG.setdefault("paths", {})["project_root"] = str(PROJECT_ROOT)
+
 # ── Apply .env overrides ──────────────────────────────────────────────────────
 if os.getenv("OLLAMA_HOST"):
     CFG["llm"]["host"] = os.getenv("OLLAMA_HOST")

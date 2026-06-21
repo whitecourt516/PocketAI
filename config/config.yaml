@@ -3,6 +3,11 @@
 # Machine-specific paths and secrets go in .env — not here.
 # This file is committed to git. Never put API keys or passwords here.
 
+# paths.project_root is computed at load time by config_loader (derived from the
+# repo location), so it's correct no matter where Pocket is launched from. It's
+# injected into CFG at runtime — do NOT hardcode an absolute path here, since this
+# file is committed and must stay machine-agnostic (A3).
+
 llm:
   model: "llama3.1"
   host: "http://localhost:11434"   # override with OLLAMA_HOST in .env
