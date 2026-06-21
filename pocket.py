@@ -160,8 +160,20 @@ def cli_input_loop():
                 print(f"  [/read blocked: {filepath} is on the denylist]\n")
                 continue
 
+            # Formats /read can't handle as plain text (need parsing, not decoding)
+            _BINARY_SUFFIXES = {".docx", ".doc", ".pdf", ".xlsx", ".xls",
+                                ".pptx", ".ppt", ".zip", ".png", ".jpg", ".jpeg", ".gif"}
+
             try:
-                content = path.read_text(encoding="utf-8")
+                if path.suffix.lower() in _BINARY_SUFFIXES:
+                    print(f"  [/read: {path.suffix} is a binary/office format — "
+                          f"/read handles plain text only for now.]\n")
+                    continue
+
+                try:
+                    content = path.read_text(encoding="utf-8")
+                except UnicodeDecodeError:
+                    content = path.read_text(encoding="cp1252")  # Windows-saved text fallback
 
                 print(f"  [Loaded: {path} ({len(content)} chars)]\n")
 

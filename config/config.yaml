@@ -17,7 +17,6 @@ memory:
   n_results: 6
   knowledge_files:
     - "pocket_project_notes.md"
-    - "pocket_master_roadmap.md"
     - "about-me.md"
 
 stt:
