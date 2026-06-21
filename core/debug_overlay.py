@@ -63,14 +63,14 @@ class DebugOverlay:
             daemon=True,
         )
         self._live_thread.start()
-        log.info(f"[overlay] Live mode started ({interval}s interval)")
+        log.info("overlay", f"Live mode started ({interval}s interval)")
 
     def stop_live(self) -> None:
         """Stop live push mode."""
         self._stop_event.set()
         if self._live_thread:
             self._live_thread.join(timeout=3)
-        log.info("[overlay] Live mode stopped")
+        log.info("overlay", "Live mode stopped")
 
     def toggle_live(self, interval: int = LIVE_INTERVAL_SECONDS) -> None:
         """Toggle live mode on/off."""
@@ -124,7 +124,7 @@ class DebugOverlay:
             })
 
         return {
-            "command": "debug",
+            "type": "debug",
             "state": {
                 **snap,
                 "events": events,
@@ -137,4 +137,4 @@ class DebugOverlay:
         try:
             self._send(payload)
         except Exception as exc:
-            log.debug(f"[overlay] Send failed: {exc}")
+            log.error("overlay", f"Send failed: {exc}")

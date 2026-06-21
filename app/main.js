@@ -305,7 +305,7 @@ function handleCommand(msg) {
       break;
 
     default:
-      console.log('[Pocket] Unknown command type:', msg.type);
+      console.log('[Pocket] Unknown command type:', msg.type || msg.command);
   }
 }
 

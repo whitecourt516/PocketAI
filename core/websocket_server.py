@@ -221,20 +221,12 @@ class WebSocketModule(PocketModule):
         state.set_websocket_status("RESYNCING")
         try:
             expression = state.expression
-            speaking   = state.speaking
-            thinking   = state.thinking
 
             if expression and expression != "neutral":
                 await self._send_raw(json.dumps({
-                    "command": "set_expression",
-                    "expression": expression
+                    "type":  "expression",
+                    "value": expression
                 }))
-
-            if thinking:
-                await self._send_raw(json.dumps({"command": "thinking_start"}))
-
-            if speaking:
-                await self._send_raw(json.dumps({"command": "speaking_start"}))
 
         except Exception as e:
             print(f"  [WebSocket] Resync failed: {e}")

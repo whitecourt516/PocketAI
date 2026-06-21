@@ -141,7 +141,7 @@ def run_startup_checks(modules: dict, send_to_avatar_fn=None) -> bool:
     # ── Emit health summary to avatar for 4t overlay ──────────────────────────
     if send_to_avatar_fn is not None:
         health_summary = {
-            "command": "health_summary",
+            "type": "health_summary",
             "services": {
                 key: results.get(key, "ok")
                 for service in SERVICE_REGISTRY
