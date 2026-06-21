@@ -14,13 +14,11 @@ Nothing is done automatically beyond alerting. Pocket reports, user decides.
 
 import threading
 import time
-import logging
 from typing import Optional, Callable
 
 from core.state_manager import state
 from core.degradation import mark_degraded, mark_recovered
-
-logger = logging.getLogger(__name__)
+from core.logger import log
 
 # ─── Default thresholds ───────────────────────────────────────────────────────
 # Override these in config.yaml under monitoring: if you want tighter/looser checks.
@@ -78,7 +76,7 @@ class ServiceMonitor:
     def start(self) -> None:
         """Start the background monitoring thread."""
         if self._thread and self._thread.is_alive():
-            logger.warning("[monitor] Already running — ignoring start() call")
+            log.warning("[monitor] Already running — ignoring start() call")
             return
 
         self._stop_event.clear()
@@ -88,14 +86,14 @@ class ServiceMonitor:
             daemon=True,   # dies automatically when main process exits
         )
         self._thread.start()
-        logger.info(f"[monitor] Started — checking every {self._interval}s")
+        log.info(f"[monitor] Started — checking every {self._interval}s")
 
     def stop(self) -> None:
         """Signal the monitoring thread to stop and wait for it to exit."""
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=5)
-        logger.info("[monitor] Stopped")
+        log.info("[monitor] Stopped")
 
     def health_check(self) -> bool:
         """4s contract — the monitor itself is healthy if its thread is alive."""
@@ -126,7 +124,7 @@ class ServiceMonitor:
             try:
                 healthy = module.health_check()
             except Exception as exc:
-                logger.debug(f"[monitor] health_check() raised for {service_name}: {exc}")
+                log.debug(f"[monitor] health_check() raised for {service_name}: {exc}")
                 healthy = False
 
             # Write into state manager

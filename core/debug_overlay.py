@@ -16,8 +16,7 @@ from typing import Optional, Callable
 
 from core.state_manager import state
 from core.event_bus import bus
-
-logger = logging.getLogger(__name__)
+from core.logger import log
 
 LIVE_INTERVAL_SECONDS = 3   # how often to push state in live mode
 
@@ -64,14 +63,14 @@ class DebugOverlay:
             daemon=True,
         )
         self._live_thread.start()
-        logger.info(f"[overlay] Live mode started ({interval}s interval)")
+        log.info(f"[overlay] Live mode started ({interval}s interval)")
 
     def stop_live(self) -> None:
         """Stop live push mode."""
         self._stop_event.set()
         if self._live_thread:
             self._live_thread.join(timeout=3)
-        logger.info("[overlay] Live mode stopped")
+        log.info("[overlay] Live mode stopped")
 
     def toggle_live(self, interval: int = LIVE_INTERVAL_SECONDS) -> None:
         """Toggle live mode on/off."""
@@ -138,4 +137,4 @@ class DebugOverlay:
         try:
             self._send(payload)
         except Exception as exc:
-            logger.debug(f"[overlay] Send failed: {exc}")
+            log.debug(f"[overlay] Send failed: {exc}")

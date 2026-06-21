@@ -10,7 +10,7 @@ import sys
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from core.websocket_server import send_to_avatar
+    from core.websocket_server import send_dict_to_avatar
 
 # ─── Service registry ────────────────────────────────────────────────────────
 #

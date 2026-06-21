@@ -263,6 +263,10 @@ websocket_module = WebSocketModule()
 # kept so existing pocket.py calls don't break during migration
 # ═════════════════════════════════════════════════════════════════════════════
 
-def send_to_avatar(data: dict) -> bool:
-    """Thin wrapper — routes through websocket_module.send()."""
+def send_dict_to_avatar(data: dict) -> bool:
+    """Thin wrapper — routes through websocket_module.send().
+
+    Renamed from send_to_avatar (A5) so it no longer collides with
+    avatar_router.send_to_avatar, which takes a str and routes a full reply.
+    """
     return websocket_module.send(data)

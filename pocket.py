@@ -22,8 +22,6 @@ import os
 import sys
 import threading
 
-from core.executor import execute_command
-
 # ── Path setup ────────────────────────────────────────────────────────────────
 script_dir   = os.path.dirname(os.path.abspath(__file__))
 project_root = script_dir
@@ -54,14 +52,13 @@ from core.stt import (
     init_whisper,
     keyboard_listener,
 )
-from core.websocket_server import websocket_module
+from core.websocket_server import websocket_module, send_dict_to_avatar
 from core.logger import log, logger_module
 from core.llm import (
     session_history,
     llm_module,
     handle_user_input_sync,
 )
-from core.avatar_router import send_to_avatar
 from core.health_check import run_startup_checks
 from core.monitor import create_monitor
 from core.debug_overlay import DebugOverlay
@@ -71,7 +68,6 @@ from core.executor import execute_command
 from core.backup_manager import restore_latest_backup
 from core.event_bus import bus
 from core.degradation import on_websocket_degraded, on_websocket_connected
-from core.logger import log, logger_module
 from core.web_search import search, format_for_llm
 from core.file_editor import safe_write
 
@@ -317,17 +313,17 @@ def main():
         "tts":    tts_module,
         "ws":     websocket_module,
     }
-    if not run_startup_checks(modules, send_to_avatar):
+    if not run_startup_checks(modules, send_dict_to_avatar):
         sys.exit(1)
 
     # Continuous self-monitoring (Stage 4j.1)
     global monitor
-    monitor = create_monitor(modules, send_to_avatar_fn=send_to_avatar)
+    monitor = create_monitor(modules, send_to_avatar_fn=send_dict_to_avatar)
     monitor.start()
 
     # Runtime debug overlay (Stage 4t)
     global overlay
-    overlay = DebugOverlay(send_to_avatar_fn=websocket_module.send)
+    overlay = DebugOverlay(send_to_avatar_fn=send_dict_to_avatar)
 
     # Alt+D hotkey thread
     altd_thread = threading.Thread(target=altd_listener, daemon=True)
@@ -339,3 +335,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
