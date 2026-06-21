@@ -4,13 +4,15 @@ title Pocket Engine
 color 0E
 cd /d "%~dp0"
 
-REM --- Virtual environment (recommended - see audit finding A8) --------------
-REM Pocket currently runs on global Python. To make requirements.txt
-REM reproducible, create a venv once:
-REM     py -m venv .venv
-REM     .venv\Scripts\pip install -r requirements.txt
-REM then uncomment the next line so the engine always uses it:
-REM call ".venv\Scripts\activate.bat"
+REM --- Virtual environment (A8) ----------------------------------------------
+REM Pocket runs in a local Python 3.13 venv (.venv) for reproducibility.
+REM Activate it so the engine never silently falls back to global Python.
+if exist ".venv\Scripts\activate.bat" (
+    call ".venv\Scripts\activate.bat"
+) else (
+    echo  [warning] .venv not found - running on global Python.
+    echo            Create it:  py -3.13 -m venv .venv  then  pip install -r requirements.txt
+)
 REM ---------------------------------------------------------------------------
 
 echo.
