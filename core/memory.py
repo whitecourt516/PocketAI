@@ -29,18 +29,20 @@ memory        = chroma_client.get_or_create_collection(name=COLLECTION_NAME)
 # CORE FUNCTIONS (unchanged public API)
 # ═════════════════════════════════════════════════════════════════════════════
 
-def save_memory(role: str, content: str):
+def save_memory(role: str, content: str, source: str = None):
     if len(content.strip()) < 20:
         return
+    metadata = {"role": role, "timestamp": str(time.time())}
+    if source:
+        metadata["source"] = source   # only knowledge chunks carry a source
     try:
         memory.add(
             documents=[f"{role}: {content}"],
             ids=[str(uuid.uuid4())],
-            metadatas=[{"role": role, "timestamp": str(time.time())}]
+            metadatas=[metadata]
         )
     except Exception as e:
         mark_degraded("chroma", f"save_memory failed: {e}")
-
 
 def get_relevant_memories(query: str) -> str:
     try:
@@ -61,6 +63,7 @@ def load_knowledge_file(filepath: str):
     if not os.path.exists(path):
         print(f"  [Knowledge file not found: {path}]")
         return
+    source = os.path.basename(path)
     with open(path, "r", encoding="utf-8") as f:
         content = f.read()
     chunk_size, overlap = 600, 80
@@ -70,8 +73,8 @@ def load_knowledge_file(filepath: str):
         start += chunk_size - overlap
     for chunk in chunks:
         if chunk.strip():
-            save_memory("knowledge", chunk)
-    print(f"  [Knowledge loaded: {os.path.basename(path)} ({len(chunks)} chunks)]")
+            save_memory("knowledge", chunk, source=source)
+    print(f"  [Knowledge loaded: {source} ({len(chunks)} chunks)]")
 
 
 def bootstrap_knowledge():

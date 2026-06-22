@@ -17,7 +17,7 @@ memory:
   n_results: 6
   knowledge_files:
     - "pocket_project_notes.md"
-    - "about-me.md"
+    - "pocket-identity.md"
 
 stt:
   whisper_model: "base"
