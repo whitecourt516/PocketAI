@@ -15,9 +15,7 @@ llm:
 memory:
   collection_name: "personal_memory"
   n_results: 6
-  knowledge_files:
-    - "pocket_project_notes.md"
-    - "pocket-identity.md"
+  knowledge_files: []
 
 stt:
   whisper_model: "base"

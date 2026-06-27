@@ -84,8 +84,11 @@ def bootstrap_knowledge():
             return
     except Exception:
         pass
+    files = KNOWLEDGE_FILES or []          # tolerate None / empty config
+    if not files:
+        return                              # nothing to seed — skip silently
     print("\n  [First run — loading knowledge files...]")
-    for f in KNOWLEDGE_FILES:
+    for f in files:
         load_knowledge_file(f)
     print()
 
