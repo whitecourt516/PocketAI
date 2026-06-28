@@ -27,6 +27,7 @@ import core.tts as tts
 from core.state_manager import state
 from core.event_bus import bus
 from core.degradation import is_degraded
+import core.orchestrator as orchestrator
 
 # ── Bus event capture ─────────────────────────────────────────────────────────
 _events = []
@@ -61,15 +62,15 @@ class _DeadCollection:
 
 def test_ollama():
     print("\n[Ollama]")
-    real_chat = llm.chat
-    real_save = llm.save_memory
-    llm.save_memory = lambda *a, **k: None   # don't pollute memory with test text
+    real_chat = orchestrator.chat
+    real_save = orchestrator.save_memory
+    orchestrator.save_memory = lambda *a, **k: None   # don't pollute memory with test text
     try:
         # ---- Fault ----
         _events.clear()
         def _dead(*a, **k):
             raise RuntimeError("injected: ollama unreachable")
-        llm.chat = _dead
+        orchestrator.chat = _dead
 
         crashed = False
         try:
@@ -83,7 +84,7 @@ def test_ollama():
 
         # ---- Recovery (faked success, no live Ollama needed) ----
         _events.clear()
-        llm.chat = lambda *a, **k: "ok"
+        orchestrator.chat = lambda *a, **k: "ok"
 
         crashed = False
         try:
@@ -95,9 +96,8 @@ def test_ollama():
         check("not is_degraded('ollama')", not is_degraded("ollama"))
         check("system.recovered fired", _saw("recovered", "ollama"))
     finally:
-        llm.chat        = real_chat
-        llm.save_memory = real_save
-
+        orchestrator.chat        = real_chat
+        orchestrator.save_memory = real_save
 
 # ═════════════════════════════════════════════════════════════════════════════
 # CHROMA

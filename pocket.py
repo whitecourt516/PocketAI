@@ -55,10 +55,10 @@ from core.stt import (
 from core.websocket_server import websocket_module, send_dict_to_avatar
 from core.logger import log, logger_module
 from core.llm import (
-    session_history,
     llm_module,
     handle_user_input_sync,
 )
+from core.orchestrator import session_history
 from core.health_check import run_startup_checks
 from core.monitor import create_monitor
 from core.debug_overlay import DebugOverlay

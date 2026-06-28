@@ -12,11 +12,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import core.llm as llm
 import core.tts as tts
-
+import core.orchestrator as orchestrator
 
 def test_mutex_serializes():
     """5 concurrent turns must run one-at-a-time and leave history uncorrupted."""
-    llm.session_history.clear()
+    orchestrator.session_history.clear()
 
     concurrency = {"now": 0, "max": 0}
     guard = threading.Lock()
@@ -30,11 +30,11 @@ def test_mutex_serializes():
             concurrency["now"] -= 1
         return "ok"
 
-    with patch("core.llm.chat", side_effect=fake_chat), \
-         patch.object(llm.websocket_module, "send"), \
-         patch("core.llm.save_memory"), \
-         patch("core.llm.get_relevant_memories", return_value=""), \
-         patch("core.llm.tts_queue"):
+    with patch("core.orchestrator.chat", side_effect=fake_chat), \
+         patch.object(orchestrator.websocket_module, "send"), \
+         patch("core.orchestrator.save_memory"), \
+         patch("core.orchestrator.get_relevant_memories", return_value=""), \
+         patch("core.orchestrator.tts_queue"):
         threads = [
             threading.Thread(target=llm.handle_user_input_sync, args=(f"msg {i}",))
             for i in range(5)
@@ -45,8 +45,8 @@ def test_mutex_serializes():
             t.join()
 
     assert concurrency["max"] == 1, f"turns overlapped: max concurrency = {concurrency['max']}"
-    assert len(llm.session_history) == 10, f"expected 10 history entries, got {len(llm.session_history)}"
-    llm.session_history.clear()
+    assert len(orchestrator.session_history) == 10, f"expected 10 history entries, got {len(orchestrator.session_history)}"
+    orchestrator.session_history.clear()
     print("PASS mutex — 5 concurrent turns serialized (max concurrency 1), history intact")
 
 
