@@ -7,6 +7,9 @@ import threading
 import time
 from unittest.mock import patch
 
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import core.llm as llm
 import core.tts as tts
 
@@ -18,16 +21,16 @@ def test_mutex_serializes():
     concurrency = {"now": 0, "max": 0}
     guard = threading.Lock()
 
-    def fake_chat(model, messages, **kwargs):
+    def fake_chat(messages, options=None):
         with guard:
             concurrency["now"] += 1
             concurrency["max"] = max(concurrency["max"], concurrency["now"])
         time.sleep(0.3)  # stand in for a real Ollama call
         with guard:
             concurrency["now"] -= 1
-        return {"message": {"content": "ok"}}
+        return "ok"
 
-    with patch.object(llm.ollama_client, "chat", side_effect=fake_chat), \
+    with patch("core.llm.chat", side_effect=fake_chat), \
          patch.object(llm.websocket_module, "send"), \
          patch("core.llm.save_memory"), \
          patch("core.llm.get_relevant_memories", return_value=""), \

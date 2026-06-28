@@ -12,23 +12,16 @@
 #   health_check() — sends a minimal ping to Ollama and checks for a response
 #   on_event()     — handles "llm.query" events from the bus (4q)
 
-import os
 import contextlib
 import threading
 
-import ollama
-
-from config.settings import MODEL
 from persona.prompt_loader import build_system_prompt
 from core.memory import get_relevant_memories, save_memory
 from core.websocket_server import websocket_module
 from core.tts import tts_queue
 from core.pocket_module import PocketModule
 from core.degradation import mark_degraded, mark_recovered
-
-
-# ── Ollama client ─────────────────────────────────────────────────────────────
-ollama_client = ollama.Client(host=os.getenv("OLLAMA_HOST", "http://localhost:11434"))
+from core.ollama_client import chat
 
 # ── Session state ─────────────────────────────────────────────────────────────
 session_history = []
@@ -117,8 +110,7 @@ def _run_turn(text: str, persist: bool = True):
     messages.append({"role": "user", "content": text})
 
     try:
-        response = ollama_client.chat(model=MODEL, messages=messages)
-        reply    = response["message"]["content"]
+        reply = chat(messages)
     except Exception as e:
         # Ollama unreachable / errored — degrade gracefully instead of dying.
         mark_degraded("ollama", str(e))
@@ -172,12 +164,11 @@ class LLMModule(PocketModule):
 
     def health_check(self) -> bool:
         try:
-            response = ollama_client.chat(
-                model=MODEL,
-                messages=[{"role": "user", "content": "hi"}],
+            reply = chat(
+                [{"role": "user", "content": "hi"}],
                 options={"num_predict": 1},
             )
-            return bool(response.get("message", {}).get("content"))
+            return bool(reply)
         except Exception as e:
             print(f"  [LLMModule] health_check error: {e}")
             return False

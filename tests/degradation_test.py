@@ -61,15 +61,15 @@ class _DeadCollection:
 
 def test_ollama():
     print("\n[Ollama]")
-    real_client = llm.ollama_client
-    real_save   = llm.save_memory
+    real_chat = llm.chat
+    real_save = llm.save_memory
     llm.save_memory = lambda *a, **k: None   # don't pollute memory with test text
     try:
         # ---- Fault ----
         _events.clear()
-        class _Dead:
-            def chat(self, *a, **k): raise RuntimeError("injected: ollama unreachable")
-        llm.ollama_client = _Dead()
+        def _dead(*a, **k):
+            raise RuntimeError("injected: ollama unreachable")
+        llm.chat = _dead
 
         crashed = False
         try:
@@ -83,9 +83,7 @@ def test_ollama():
 
         # ---- Recovery (faked success, no live Ollama needed) ----
         _events.clear()
-        class _Ok:
-            def chat(self, *a, **k): return {"message": {"content": "ok"}}
-        llm.ollama_client = _Ok()
+        llm.chat = lambda *a, **k: "ok"
 
         crashed = False
         try:
@@ -97,8 +95,8 @@ def test_ollama():
         check("not is_degraded('ollama')", not is_degraded("ollama"))
         check("system.recovered fired", _saw("recovered", "ollama"))
     finally:
-        llm.ollama_client = real_client
-        llm.save_memory   = real_save
+        llm.chat        = real_chat
+        llm.save_memory = real_save
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -170,7 +168,7 @@ def test_piper():
     real_exe2  = tts.PIPER_EXE
     try:
         class _FakeProc:
-            def communicate(self, input=None):
+            def communicate(self, input=None, timeout=None):
                 return (b"\x00\x00", None)
         subprocess.Popen = lambda *a, **k: _FakeProc()
         tts.sd.play = lambda *a, **k: None
