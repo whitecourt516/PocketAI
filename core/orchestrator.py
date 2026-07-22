@@ -26,8 +26,16 @@ from core.ollama_client import chat
 # ── Session state ─────────────────────────────────────────────────────────────
 session_history = []
 
+# ── Prompt-assembly seam ──────────────────────────────────────────────────────
+# retrieved chunks → [compression] → context injection.
+# Passthrough until 6g wires the LLMLingua-style compressor (token-level strip of
+# retrieved memory before injection; complements 6g's content-level summarisation).
+# Leaving the seam here now means 6g drops the compressor into one place instead
+# of retrofitting it into a finished assembly line. (impr. #5)
+def compress_context(chunks: str) -> str:
+    return chunks
 
-def run_turn(text: str, persist: bool = True) -> None:
+def run_turn(text: str, persist: bool = True, prefetched: str | None = None) -> None:
     """The turn pipeline. Runs under the turn mutex (see core.llm.TurnManager).
 
     Everything from memory retrieval through memory write and dispatch lives
@@ -41,13 +49,19 @@ def run_turn(text: str, persist: bool = True) -> None:
                     is written to permanent vector memory. Stops file dumps /
                     web results from polluting semantic search. This is the seam
                     5e flips to tagged-ephemeral storage once a consumer exists.
+    prefetched    — retrieved memory computed *outside* the lock (Stage 5 STT
+                    prefetch). None → not provided → retrieve inline (the only
+                    path today). Either way the result is consumed here, under
+                    the mutex, so retrieval-through-write stays serialized.
     """
     global session_history
 
     websocket_module.send({"type": "expression", "value": "thinking"})
     websocket_module.send({"type": "wander_pause"})
 
-    past        = get_relevant_memories(text)
+    # CHANGED: retrieval is injectable — prefetch feeds in, else retrieve inline.
+    past        = prefetched if prefetched is not None else get_relevant_memories(text)
+    past        = compress_context(past)  # CHANGED: passthrough seam (impr. #5)
     full_system = build_system_prompt() + (f"\n\n{past}" if past else "")
 
     messages = [{"role": "system", "content": full_system}]
