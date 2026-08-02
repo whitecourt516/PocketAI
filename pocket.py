@@ -70,6 +70,7 @@ from core.event_bus import bus
 from core.degradation import on_websocket_degraded, on_websocket_connected
 from core.web_search import search, format_for_llm
 from core.file_editor import safe_write
+from core.tool_registry import registry, Tool
 
 monitor = None  # set in main(), read in cli_input_loop() for cleanup
 overlay = None  # set in main(), read in cli_input_loop() for cleanup
@@ -100,187 +101,298 @@ def altd_listener():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# Shutdown
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _shutdown():
+    """Single shutdown path — used by /quit and by Ctrl-C / EOF in the loop."""
+    if overlay:
+        overlay.stop()
+    if monitor:
+        monitor.stop()
+    websocket_module.stop()
+    log.info("pocket", "Pocket signing off")
+    logger_module.stop()
+    print("\n  [Pocket signing off. Later user.]\n")
+    os._exit(0)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Tool handlers — each takes the raw argument string (guaranteed non-empty for
+# takes_args tools; the registry prints usage before calling otherwise).
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _tool_quit(args):
+    _shutdown()
+
+
+def _tool_clear(args):
+    session_history.clear()
+    print("  [Session cleared]\n")
+
+
+def _tool_memory(args):
+    print(f"  [Memory: {memory.count()} entries in ChromaDB]\n")
+
+
+def _tool_load(args):
+    load_knowledge_file(args)
+
+
+def _tool_read(args):
+    filepath = args
+    path = (
+        Path(filepath)
+        if Path(filepath).is_absolute()
+        else Path(project_root) / filepath
+    )
+
+    if not is_read_allowed(str(path)):
+        print(f"  [/read blocked: {filepath} is on the denylist]\n")
+        return
+
+    # Formats /read can't handle as plain text (need parsing, not decoding)
+    _BINARY_SUFFIXES = {".docx", ".doc", ".pdf", ".xlsx", ".xls",
+                        ".pptx", ".ppt", ".zip", ".png", ".jpg", ".jpeg", ".gif"}
+
+    try:
+        if path.suffix.lower() in _BINARY_SUFFIXES:
+            print(f"  [/read: {path.suffix} is a binary/office format — "
+                  f"/read handles plain text only for now.]\n")
+            return
+
+        try:
+            content = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            content = path.read_text(encoding="cp1252")  # Windows-saved text fallback
+
+        print(f"  [Loaded: {path} ({len(content)} chars)]\n")
+
+        handle_user_input_sync(
+            f"I'm showing you this file: {filepath}\n\n```\n{content}\n```",
+            persist=False,
+        )
+
+    except FileNotFoundError:
+        print(f"  [File not found: {path}]\n")
+
+    except Exception as e:
+        print(f"  [/read error: {e}]\n")
+
+
+def _tool_edit(args):
+    filepath = args
+
+    print(f"  [Editing: {filepath}]")
+    print("  Paste the new file content. End with a line containing only:  END\n")
+
+    lines = []
+    cancelled = False
+    while True:
+        try:
+            line = input()
+        except (EOFError, KeyboardInterrupt):
+            cancelled = True
+            break
+        if line.strip() == "END":
+            break
+        lines.append(line)
+
+    if cancelled:
+        print("\n  [/edit cancelled]\n")
+        return
+
+    result = safe_write(filepath, "\n".join(lines))
+    print(f"  {result}\n")
+
+
+def _tool_search(args):
+    query = args
+
+    print(f"  [Searching the web for: {query}]\n")
+
+    # user typed this himself — his invocation is the approval.
+    result = search(query, require_approval=False)
+
+    if not result["ok"]:
+        print(f"  [/search failed: {result['error']}]\n")
+        return
+
+    handle_user_input_sync(
+        f"I searched the web for: {query}\n\n"
+        f"Here are the results:\n\n{format_for_llm(result)}",
+        persist=False,
+    )
+
+
+def _tool_exec(args):
+    command = args
+
+    print(f"  [Executing: {command}]\n")
+
+    result = execute_command(command)
+
+    print(result)
+    print()
+
+
+def _tool_rollback(args):
+    filepath = args
+
+    path = (
+        Path(filepath)
+        if Path(filepath).is_absolute()
+        else Path(project_root) / filepath
+    )
+
+    try:
+        result = restore_latest_backup(str(path))
+        print(f"  {result}\n")
+    except Exception as e:
+        print(f"  [/rollback error: {e}]\n")
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Tool registry — schema-first. Schemas are METADATA on this cut; the NL-dispatch
+# cut validates against them and routes high-risk calls through propose_action().
+# ═════════════════════════════════════════════════════════════════════════════
+
+registry.register(Tool(
+    name="/quit",
+    handler=_tool_quit,
+    description="Shut Pocket down cleanly.",
+    aliases=("quit", "exit", "bye"),
+    exact=True,  # bare-word aliases must be the whole line, not just the first token
+    risk="low",
+    params_schema={"type": "object", "properties": {}},
+))
+
+registry.register(Tool(
+    name="/clear",
+    handler=_tool_clear,
+    description="Clear the in-session conversation history.",
+    risk="low",
+    params_schema={"type": "object", "properties": {}},
+))
+
+registry.register(Tool(
+    name="/memory",
+    handler=_tool_memory,
+    description="Report how many entries are stored in ChromaDB.",
+    risk="low",
+    params_schema={"type": "object", "properties": {}},
+))
+
+registry.register(Tool(
+    name="/load",
+    handler=_tool_load,
+    description="Load a knowledge file into memory.",
+    takes_args=True,
+    arg_hint="<file>",
+    usage="[/load requires a filepath]",
+    risk="low",
+    params_schema={
+        "type": "object",
+        "properties": {"filepath": {"type": "string", "description": "Knowledge file to load"}},
+        "required": ["filepath"],
+    },
+))
+
+registry.register(Tool(
+    name="/read",
+    handler=_tool_read,
+    description="Read a plain-text file and show its contents to Pocket (not persisted).",
+    takes_args=True,
+    arg_hint="<file>",
+    usage="[/read requires a filepath]",
+    risk="low",
+    params_schema={
+        "type": "object",
+        "properties": {"filepath": {"type": "string", "description": "Text file to read"}},
+        "required": ["filepath"],
+    },
+))
+
+registry.register(Tool(
+    name="/edit",
+    handler=_tool_edit,
+    description="Overwrite a file with pasted content (backup-before-write via safe_write).",
+    takes_args=True,
+    arg_hint="<file>",
+    usage="[/edit requires a filepath]",
+    risk="high",
+    params_schema={
+        "type": "object",
+        "properties": {"filepath": {"type": "string", "description": "File to overwrite"}},
+        "required": ["filepath"],
+    },
+))
+
+registry.register(Tool(
+    name="/search",
+    handler=_tool_search,
+    description="Search the web (Tavily) and hand the results to Pocket (not persisted).",
+    takes_args=True,
+    arg_hint="<query>",
+    usage="[/search requires a query]",
+    risk="low",
+    params_schema={
+        "type": "object",
+        "properties": {"query": {"type": "string", "description": "Web search query"}},
+        "required": ["query"],
+    },
+))
+
+registry.register(Tool(
+    name="/exec",
+    handler=_tool_exec,
+    description="Run a command through the constrained executor (approval-gated).",
+    takes_args=True,
+    arg_hint="<command>",
+    usage="[/exec requires a command]",
+    risk="high",
+    params_schema={
+        "type": "object",
+        "properties": {"command": {"type": "string", "description": "Command line to execute"}},
+        "required": ["command"],
+    },
+))
+
+registry.register(Tool(
+    name="/rollback",
+    handler=_tool_rollback,
+    description="Restore a file from its most recent backup.",
+    takes_args=True,
+    arg_hint="<file>",
+    usage="[/rollback requires a filepath]",
+    risk="medium",
+    params_schema={
+        "type": "object",
+        "properties": {"filepath": {"type": "string", "description": "File to restore"}},
+        "required": ["filepath"],
+    },
+))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # CLI — text input loop
 # ═════════════════════════════════════════════════════════════════════════════
 
 def cli_input_loop():
     print("\nType a message or hold F9 to speak.")
-    print("Commands: /quit  /clear  /memory  /load <file>  /read <file>  /search <query>  /edit <file>\n")
+    print(registry.format_commands() + "\n")
 
     while True:
         try:
             user_input = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
-            if overlay:
-                overlay.stop()
-            if monitor:
-                monitor.stop()
-            websocket_module.stop()
-            log.info("pocket", "Pocket signing off")
-            logger_module.stop()    
-            print("\n  [Pocket signing off. Later user.]\n")
-            os._exit(0)
+            _shutdown()
 
         if not user_input:
             continue
 
-        if user_input.lower() in ("/quit", "quit", "exit", "bye"):
-            if overlay:
-                overlay.stop()
-            if monitor:
-                monitor.stop()
-            websocket_module.stop()
-            log.info("pocket", "Pocket signing off")
-            logger_module.stop()
-            print("\n  [Pocket signing off. Later user.]\n")
-            os._exit(0)
-
-        if user_input.lower() == "/clear":
-            session_history.clear()
-            print("  [Session cleared]\n")
+        if registry.dispatch(user_input):
             continue
-
-        if user_input.lower() == "/memory":
-            print(f"  [Memory: {memory.count()} entries in ChromaDB]\n")
-            continue
-
-        if user_input.lower().startswith("/load "):
-            load_knowledge_file(user_input[6:].strip())
-            continue
-
-        if user_input.lower().startswith("/read "):
-            filepath = user_input[6:].strip()
-            path = (
-                Path(filepath)
-                if Path(filepath).is_absolute()
-                else Path(project_root) / filepath
-            )
-
-            if not is_read_allowed(str(path)):
-                print(f"  [/read blocked: {filepath} is on the denylist]\n")
-                continue
-
-            # Formats /read can't handle as plain text (need parsing, not decoding)
-            _BINARY_SUFFIXES = {".docx", ".doc", ".pdf", ".xlsx", ".xls",
-                                ".pptx", ".ppt", ".zip", ".png", ".jpg", ".jpeg", ".gif"}
-
-            try:
-                if path.suffix.lower() in _BINARY_SUFFIXES:
-                    print(f"  [/read: {path.suffix} is a binary/office format — "
-                          f"/read handles plain text only for now.]\n")
-                    continue
-
-                try:
-                    content = path.read_text(encoding="utf-8")
-                except UnicodeDecodeError:
-                    content = path.read_text(encoding="cp1252")  # Windows-saved text fallback
-
-                print(f"  [Loaded: {path} ({len(content)} chars)]\n")
-
-                handle_user_input_sync(
-                    f"I'm showing you this file: {filepath}\n\n```\n{content}\n```",
-                    persist=False,
-                )
-
-            except FileNotFoundError:
-                print(f"  [File not found: {path}]\n")
-
-            except Exception as e:
-                print(f"  [/read error: {e}]\n")
-
-            continue
-        if user_input.lower().startswith("/edit "):
-            filepath = user_input[6:].strip()
-
-            if not filepath:
-                print("  [/edit requires a filepath]\n")
-                continue
-
-            print(f"  [Editing: {filepath}]")
-            print("  Paste the new file content. End with a line containing only:  END\n")
-
-            lines = []
-            cancelled = False
-            while True:
-                try:
-                    line = input()
-                except (EOFError, KeyboardInterrupt):
-                    cancelled = True
-                    break
-                if line.strip() == "END":
-                    break
-                lines.append(line)
-
-            if cancelled:
-                print("\n  [/edit cancelled]\n")
-                continue
-
-            result = safe_write(filepath, "\n".join(lines))
-            print(f"  {result}\n")
-
-            continue
-        if user_input.lower().startswith("/search "):
-            query = user_input[8:].strip()
-
-            if not query:
-                print("  [/search requires a query]\n")
-                continue
-
-            print(f"  [Searching the web for: {query}]\n")
-
-            # user typed this himself — his invocation is the approval.
-            result = search(query, require_approval=False)
-
-            if not result["ok"]:
-                print(f"  [/search failed: {result['error']}]\n")
-                continue
-
-            handle_user_input_sync(
-                f"I searched the web for: {query}\n\n"
-                f"Here are the results:\n\n{format_for_llm(result)}",
-                persist=False,
-            )
-
-            continue
-
-        if user_input.lower().startswith("/exec "):
-            command = user_input[6:].strip()
-
-            if not command:
-                print("  [/exec requires a command]\n")
-                continue
-
-            print(f"  [Executing: {command}]\n")
-
-            result = execute_command(command)
-
-            print(result)
-            print()
-
-            continue
-
-
-        if user_input.lower().startswith("/rollback "):
-            filepath = user_input[10:].strip()
-
-            if not filepath:
-                print("  [/rollback requires a filepath]\n")
-                continue
-
-            path = (
-                Path(filepath)
-                if Path(filepath).is_absolute()
-                else Path(project_root) / filepath
-            )
-
-            try:
-                result = restore_latest_backup(str(path))
-                print(f"  {result}\n")
-            except Exception as e:
-                print(f"  [/rollback error: {e}]\n")
-
-            continue
-
 
         handle_user_input_sync(user_input)
 
