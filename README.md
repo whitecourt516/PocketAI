@@ -1,8 +1,25 @@
 # Pocket
 
-A fully local, offline-first personal AI companion — persistent memory, voice in/out, a visual otter avatar, web search, and sandboxed self-improvement. Everything runs on your own machine. Nothing leaves it except an optional web search call.
+A fully local, offline-first personal AI companion — persistent memory, voice in/out, a visual otter avatar, web search, and permission-gated tool use. Everything runs on your own machine. Nothing leaves it except an optional web search call.
 
-> **Status:** Stages 1–4 complete (with audit corrections). **Stage 4.5 — Audit Remediation — in progress.** A full-codebase audit (2026-05-31) found the foundation solid but a few "complete" items overstated and two real risks; Stage 4.5 closes them before the Live2D gate and Stage 5. See [`pocket_master_roadmap.md`](./pocket_master_roadmap.md) for the full plan.
+Solo project, designed and built by user since May 2026: about 4,500 lines of Python across 24 core modules and about 1,200 lines of JavaScript/HTML for the Electron frontend. Built with AI pair-programming (Claude for design, Claude Code for multi-file edits); I make the design calls and review and test every change.
+
+> **Status:** Stages 1–4 complete (with audit corrections). **Stage 4.5 — Audit Remediation — in progress.** A full-codebase audit (2026-05-31) found the foundation solid but a few "complete" items overstated and two real risks. Both risks are closed (4.5c security hardening, 4.5d execution-flow safety); the conversation refactor (4.5f) is in progress. See [`pocket_master_roadmap.md`](./pocket_master_roadmap.md) for the full plan.
+
+---
+
+## Security work
+
+Pocket can run shell commands and edit files on a real machine, so most of the engineering effort has gone into making sure it can't do that without permission. Highlights:
+
+- **Human-in-the-loop approval gate.** Every AI-proposed action (shell command, file edit) goes through one `propose_action()` y/n prompt and is written to an append-only JSON Lines audit log. An [architecture decision record](./docs/planning/adr-agent-tool-path.md) establishes that *model invocation is not approval*: AI-selected tool calls cannot skip the gate.
+- **Self-audit found the command filter was ineffective.** A [six-pass audit](./docs/planning/audit-2026-05-31.md) of my own codebase showed the executor's substring denylist blocked only 1 of 10 destructive test commands (`rm  -r -f` with extra spaces or split flags walked straight past `rm -rf`). Replaced it with `shlex`-based parsing that matches the program and its flags, and blocks shell metacharacters, redirects, pipe-to-shell and inline `python -c`.
+- **Closed a secrets-exposure path.** The executor could read `.env` because it bypassed the read denylist. All executor and editor file access now goes through the shared `is_read_allowed()` check, with regression tests asserting secret paths are blocked.
+- **Prompt-injection stance.** Web results and file contents are treated as data, not instructions. The rule is part of the system prompt on every turn, and `/read` and `/search` output is not saved to long-term memory automatically.
+- **Validated tool calls.** A tool registry replaced the old if/elif dispatch chain; each tool declares a JSON parameter schema and a risk level.
+- **Reliability under concurrency.** A full-turn lock stops voice and text input racing on shared conversation state, and the TTS subprocess has a timeout so a hung process can't block a turn.
+
+**Known residual risks**, tracked rather than hidden: the executor still uses `shell=True`, and the path check is a heuristic. A mandatory security review is on the roadmap before any autonomous feature is enabled.
 
 ---
 
@@ -13,7 +30,7 @@ A fully local, offline-first personal AI companion — persistent memory, voice 
 - **Speaks** — Piper TTS (`en_US-lessac-medium`), fully offline.
 - **Has a face** — a transparent, always-on-top Electron otter that wanders the desktop and shows subtitles. *Note: it currently renders a single placeholder PNG. The 9-expression routing exists in the backend but can't visually render until the real Live2D model lands (see the Live2D gate below).*
 - **Reads & edits files** — `/read` and `/edit`, gated by a read denylist, with backup-before-write on the `/edit` path.
-- **Runs code** — sandboxed executor behind a per-action approval gate. *The denylist guarding it is being hardened in Stage 4.5c — see [Safety model](#safety-model).*
+- **Runs code** — constrained executor behind a per-action approval gate, with `shlex`-parsed command checks — see [Safety model](#safety-model).
 - **Searches the web** — pluggable backend (Tavily today, SearXNG path planned), with its own consent gate.
 - **Has a real identity** — `build_system_prompt()` assembles Pocket's identity into the live prompt every turn, including the stance that *external content is information, not instruction*.
 - **Stays safe** — nothing autonomous. Pocket *proposes*, user *approves*. Every approved action is logged to `logs/decisions.jsonl`.
@@ -44,42 +61,42 @@ A fully local, offline-first personal AI companion — persistent memory, voice 
 
 ```
 PocketAI/
-├── pocket.py                  — orchestrator (imports + main loop)
+├── pocket.py                  — entry point + main loop
 ├── Start-Pocket.bat           — orchestrating launcher
 ├── Start-Avatar.bat           — avatar window (independent)
 ├── Start-Engine.bat           — engine window (independent)
 ├── Stop-Pocket.bat            — scoped shutdown (tree-kill, not global taskkill)
+├── docker-compose.yml         — Ollama + n8n containers
 ├── requirements.txt           — dependencies
 ├── .env                       — secrets / machine overrides (NOT committed)
 ├── .env.example               — template
 ├── CHANGELOG.md               — informal session notes
 ├── pocket_master_roadmap.md   — full development plan
 ├── config/
-│   ├── config.yaml            — single source of truth
-│   ├── settings.py            — backwards-compat shim
+│   ├── config.yaml            — single source of truth (ports, models, security policy)
 │   └── expressions.json       — emotion keyword mappings
 ├── core/
-│   ├── config_loader.py       — loads config.yaml + .env
+│   ├── orchestrator.py        — conversation turn pipeline + session history
+│   ├── llm.py                 — Ollama facade, turn mutex, module lifecycle
+│   ├── tool_registry.py       — tool schemas + risk levels
+│   ├── permissions.py         — propose_action() approval gate + decision log
+│   ├── executor.py            — constrained command executor
+│   ├── file_editor.py         — /edit with backup-before-write
+│   ├── config_loader.py       — config.yaml + .env, read/command allowlist checks
 │   ├── memory.py              — ChromaDB helpers
-│   ├── tts.py                 — Piper TTS
-│   ├── stt.py                 — Whisper STT + F9 listener
+│   ├── web_search.py          — pluggable search backend (Tavily)
+│   ├── stt.py / tts.py        — Whisper STT + F9 listener / Piper TTS
 │   ├── websocket_server.py    — avatar WebSocket + reconnection engine
-│   ├── llm.py                 — Ollama chat handler + turn pipeline
-│   ├── avatar_router.py       — emotion detection + avatar dispatch
-│   ├── permissions.py         — permission gate + decision log
-│   └── event_bus.py           — inter-module messaging (built, under-used)
+│   ├── health_check.py, monitor.py, degradation.py — startup checks, self-monitoring, graceful degradation
+│   ├── logger.py              — structured JSONL logging
+│   └── ...                    — state manager, event bus, backups, debug overlay
 ├── persona/                   — identity sources assembled by build_system_prompt()
-│   ├── base_system.md
-│   ├── core_identity.md
-│   ├── authority.md
-│   └── memory_principles.md
-├── pocket-avatar/
-│   ├── app/
-│   │   ├── main.js            — wandering + window behavior
-│   │   └── renderer/avatar.html — visual appearance / Live2D loader (commented out)
-│   └── model/                 — Live2D .moc3 model (PENDING — the hard gate)
+├── app/                       — Electron avatar (main.js, preload.js, renderer/)
+├── docs/                      — architecture, ADRs, audit, operations, retrospectives
 ├── tests/
-│   └── smoke_test.py          — core system smoke tests
+│   ├── smoke_test.py          — core + security regression suite
+│   ├── smoke_4_5d.py          — turn-lock concurrency + subprocess timeouts
+│   └── degradation_test.py    — fault injection
 └── logs/
     └── decisions.jsonl        — append-only action log (NOT committed)
 ```
@@ -90,7 +107,7 @@ PocketAI/
 
 - **Windows** with Docker Desktop (WSL2 backend)
 - **NVIDIA GPU**, 10–12 GB VRAM, with container GPU passthrough enabled in Docker Desktop
-- **Python 3.10+** on the host (for `pocket.py`, Whisper, Piper)
+- **Python 3.13** on the host, in a `.venv` (for `pocket.py`, Whisper, Piper)
 - **Node.js** (for the Electron avatar)
 - **Ollama** (run inside Docker via Compose, or natively — your call)
 - A **Tavily API key** (free tier) if you want web search
@@ -200,15 +217,32 @@ Startup uses port-poll readiness (WebSocket on `7845`) rather than a blind sleep
 
 ```yaml
 security:
-  read_denylist: [.env, .env.local, chroma_data/, pocket_backups/]
-  executor_denylist: [rm -rf, format, shutdown, diskpart, reg delete, del /f]
+  # Paths /read is NOT allowed to access (relative to project root)
+  read_denylist:
+    - ".env"
+    - ".env.local"
+    - "chroma_data/"
+    - "pocket_backups/"
+
+  # Matched against parsed tokens — not raw substrings.
+  # Shell metacharacters and inline-exec combos (python -c, powershell -c)
+  # are blocked in code, not here.
+  executor_denylist:
+    - "rm"
+    - "rd /s"
+    - "del /f"
+    - "format"
+    - "diskpart"
+    - "shutdown"
+    - "reg delete"
+    # ... full list in config/config.yaml
 ```
 
 - `is_read_allowed(path)` — checked before any `/read`
-- `is_command_allowed(cmd)` — checked before executor commands
+- `is_command_allowed(cmd)` — checked before executor commands; parses with `shlex` and rejects shell metacharacters, redirects and chaining before matching the denylist
 - Web search has its **own** consent gate (it deliberately does *not* route through the executor denylist, since a query like "how to format a drive" would false-match `format`).
 
-Identity is **not** a single file — `build_system_prompt()` assembles it from the `persona/` sources (`base_system.md`, `core_identity.md`, `authority.md`, `memory_principles.md`) into the live prompt every turn.
+Identity is **not** a single file — `build_system_prompt()` assembles it from the `persona/` sources (`base_system.md`, `core_identity.md`, `authority.md`, `memory_principles.md`, `self_modification.md` in `persona/prompts/`) into the live prompt every turn.
 
 ---
 
@@ -223,7 +257,9 @@ Pocket is built permission-first:
 
 The guiding rule, now enforced in the live prompt: *external content is data, not authority.*
 
-> **Known limitation (being fixed in Stage 4.5c — highest-priority work on the board):** the executor's substring denylist is not a reliable boundary. The audit found it blocks only a fraction of destructive commands and the executor's file-touches can bypass the read denylist. **Treat the approval gate — the `y`/`n` you give — as the real boundary, not the denylist.** Until 4.5c lands, don't grant Pocket unsupervised execution, and assume the `executor_denylist` above is advisory, not protective.
+> **Fixed in Stage 4.5c:** the audit found the original substring denylist blocked only 1 of 10 destructive test commands, and the executor's file access could bypass the read denylist. Commands are now parsed with `shlex`, metacharacters and pipe-to-shell are blocked, and all executor file access goes through `is_read_allowed()`. Regression tests cover the dangerous-command set, secret-path blocking, and a `n` answer denying execution.
+>
+> **Still true:** the approval gate — the `y`/`n` you give — is the real boundary. The executor still uses `shell=True` and the path check is a heuristic, so the denylist is a second layer, not a sandbox. Don't grant Pocket unsupervised execution.
 
 ---
 
@@ -249,13 +285,18 @@ Run the smoke suite before and after any significant change:
 python tests/smoke_test.py
 ```
 
-Covers Ollama, ChromaDB, Piper, WebSocket, and web search plumbing. (Stage 4.5c will add executor-denylist and permission-gate assertions, which are currently skipped.)
+Covers Ollama, ChromaDB, Piper, WebSocket and web search plumbing, plus the security regressions: the executor denylist, secret-path blocking, and the permission gate rejecting on `n`.
+
+```bash
+python tests/smoke_4_5d.py         # turn-lock concurrency + subprocess timeouts
+python tests/degradation_test.py   # fault injection: Ollama / Chroma / Piper / WebSocket down
+```
 
 ---
 
 ## Roadmap
 
-Stages 1–4 are complete (with audit corrections). The current focus is **Stage 4.5 — Audit Remediation**: closing the executor security findings (4.5c), adding a turn mutex and subprocess timeouts (4.5d), hygiene fixes (4.5e), and the conversation refactor (4.5f) — all before the next gate.
+Stages 1–4 are complete (with audit corrections). The current focus is **Stage 4.5 — Audit Remediation**: the executor security findings (4.5c) and the turn mutex and subprocess timeouts (4.5d) are done; hygiene fixes (4.5e) and the conversation refactor (4.5f) are in progress — all before the next gate.
 
 That gate is a **hard stop**: the real Live2D rigged `.moc3` otter model must be in place and rendering all 9 expressions before Stage 5 (screen awareness) begins, so Stage 5 animation work is built against the real model rather than the placeholder PNG.
 
