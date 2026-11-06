@@ -1,7 +1,7 @@
 # Pocket Avatar — Setup Guide
 ## Getting the otter on your screen, step by step
 
-**Written for:** user | Windows | Ollama already running | Python installed  
+**Written for:** The user | Windows | Ollama already running | Python installed  
 **Time needed:** About 30–45 minutes  
 **What you'll have at the end:** Pocket's avatar living on your desktop, expressions changing automatically as it responds
 
@@ -263,4 +263,4 @@ The appearance config lives in two files Pocket will have full access to:
 
 ---
 
-*Pocket Avatar v1.0 | Built for user's Pocket companion project*
+*Pocket Avatar v1.0 | Built for the user's Pocket companion project*

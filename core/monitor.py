@@ -9,7 +9,7 @@ On state change (healthy → unhealthy or vice versa):
   - Prints a warning to terminal
   - Sends an alert event to the avatar (expression change)
 
-Nothing is done automatically beyond alerting. Pocket reports, user decides.
+Nothing is done automatically beyond alerting. Pocket reports, the user decides.
 """
 
 import threading

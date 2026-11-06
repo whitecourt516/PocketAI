@@ -213,7 +213,7 @@ function resumeWandering() {
 // ── WebSocket Server ──────────────────────────────────────────────────────────
 // Python expression engine connects here and sends commands like:
 // { type: "expression", value: "happy" }
-// { type: "speech", text: "Hello user!", subtitle: true }
+// { type: "speech", text: "Hello!", subtitle: true }
 // { type: "panel", content: "...", contentType: "code" }
 // { type: "panel_close" }
 // { type: "wander_pause" }   -- while speaking, pause wandering

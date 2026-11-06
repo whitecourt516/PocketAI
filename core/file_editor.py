@@ -145,7 +145,7 @@ class FileEditorModule(PocketModule):
 
     def on_event(self, event: dict) -> None:
         # Supported event: {"type": "file.write", "filepath": "...", "content": "..."}
-        # Bus-triggered writes still require user's approval via safe_write().
+        # Bus-triggered writes still require the user's approval via safe_write().
         if event.get("type") != "file.write":
             return
         filepath = event.get("filepath", "")

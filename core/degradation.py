@@ -1,7 +1,7 @@
 # core/degradation.py
 # Stage 4k — Graceful Degradation
 #
-# One place for "a service just failed — don't crash, tell user."
+# One place for "a service just failed — don't crash, tell the user."
 #   notify(message)             — surface a message over every channel that still
 #                                 works: terminal always; avatar + voice best-effort,
 #                                 each guarded on its own.
@@ -48,7 +48,7 @@ _lock = threading.Lock()
 
 
 def notify(message: str, expression: str = "concerned") -> None:
-    """Surface *message* to user over every channel that still works.
+    """Surface *message* to the user over every channel that still works.
 
     Terminal always prints. Avatar and voice are best-effort, each guarded on
     its own — if the WebSocket is down, send() just returns False; if Piper is

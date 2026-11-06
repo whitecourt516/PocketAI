@@ -81,8 +81,8 @@ def _confirm_search(query: str) -> bool:
 def search(query: str, require_approval: bool = True) -> dict:
     """Search the web via the configured backend.
 
-    require_approval=True  — Pocket-initiated: prompts user for y/n.
-    require_approval=False — user typed /search himself: no prompt, still logged.
+    require_approval=True  — Pocket-initiated: prompts the user for y/n.
+    require_approval=False — the user typed /search themselves: no prompt, still logged.
     """
     query = (query or "").strip()
     if not query:
@@ -92,9 +92,9 @@ def search(query: str, require_approval: bool = True) -> dict:
 
     if require_approval:
         if not _confirm_search(query):
-            return _fail(query, "rejected by user")
+            return _fail(query, "rejected by the user")
     else:
-        # Explicit /search — user's invocation is the approval, but still log it.
+        # Explicit /search — the user's invocation is the approval, but still log it.
         log_decision(description=f"Search the web for: {query}",
                      command=command, approved=True)
 

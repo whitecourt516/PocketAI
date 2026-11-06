@@ -10,7 +10,7 @@
 #                           shell metacharacters, and inline-exec combos via
 #                           shlex parsing (not substring matching).
 #   3. Approval gate      — every command that passes (1) and (2) still requires
-#                           user's explicit y/n before execution.
+#                           the user's explicit y/n before execution.
 #   4. Constrained cwd    — subprocess runs from PROJECT_ROOT, not wherever the
 #                           shell inherits. Limits blast radius of relative paths.
 #

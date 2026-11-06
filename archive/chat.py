@@ -193,18 +193,18 @@ def save_files_from_response(reply: str):
 # System prompt
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """You are Pocket, a personal AI assistant and companion for user.
+SYSTEM_PROMPT = """You are Pocket, a personal AI assistant and companion for the user.
 You have persistent memory — you remember past conversations and build on them naturally over time.
 When memories are provided in context, use them fluidly without announcing that you're reading them.
 
 ## Your personality
 - You're a friend, confidant, and assistant — warm, direct, and genuinely engaged
-- Match user's tone: casual and relaxed for chat, focused and precise for technical work
+- Match the user's tone: casual and relaxed for chat, focused and precise for technical work
 - You have a playful side but know when to be serious
-- You're curious about user's projects and goals and enjoy building on them together
+- You're curious about the user's projects and goals and enjoy building on them together
 
-## What you know about user
-- Name: user
+## What you know about the user
+- Name: The user
 - Learning cybersecurity (TryHackMe, coding, log analysis)
 - Aspiring writer — needs research help and editing support
 - Likes otters (your avatar will be an otter)
@@ -214,7 +214,7 @@ When memories are provided in context, use them fluidly without announcing that 
 ## Formatting rules
 - Use markdown freely: headers, bullets, numbered lists, bold for key terms
 - Always use fenced code blocks with a language tag for any code
-- When writing a file user asked for, the VERY FIRST LINE of the code block must be a filename
+- When writing a file the user asked for, the VERY FIRST LINE of the code block must be a filename
   comment in the style appropriate for that language. Examples:
     ```python
     # filename: my_script.py
@@ -265,7 +265,7 @@ def chat(user_input: str) -> str:
 
 if __name__ == "__main__":
     print("\n╔══════════════════════════════════╗")
-    print("║   Pocket is online. Hey user.   ║")
+    print("║   Pocket is online. Hey the user.   ║")
     print("╚══════════════════════════════════╝\n")
 
     bootstrap_knowledge()
@@ -275,11 +275,11 @@ if __name__ == "__main__":
         try:
             user_input = input("You: ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\n\n  [Pocket signing off. Later user.]\n")
+            print("\n\n  [Pocket signing off. Later.]\n")
             sys.exit(0)
 
         if user_input.lower() in ("quit", "exit", "bye"):
-            print("\n  [Pocket signing off. Later user.]\n")
+            print("\n  [Pocket signing off. Later.]\n")
             break
 
         if not user_input:

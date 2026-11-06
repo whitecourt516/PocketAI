@@ -2,7 +2,7 @@
 
 A fully local, offline-first personal AI companion — persistent memory, voice in/out, a visual otter avatar, web search, and permission-gated tool use. Everything runs on your own machine. Nothing leaves it except an optional web search call.
 
-Solo project, designed and built by user since May 2026: about 4,500 lines of Python across 24 core modules and about 1,200 lines of JavaScript/HTML for the Electron frontend. Built with AI pair-programming (Claude for design, Claude Code for multi-file edits); I make the design calls and review and test every change.
+Solo project, designed and built by me since May 2026: about 4,500 lines of Python across 24 core modules and about 1,200 lines of JavaScript/HTML for the Electron frontend. Built with AI pair-programming (Claude for design, Claude Code for multi-file edits); I make the design calls and review and test every change.
 
 > **Status:** Stages 1–4 complete (with audit corrections). **Stage 4.5 — Audit Remediation — in progress.** A full-codebase audit (2026-05-31) found the foundation solid but a few "complete" items overstated and two real risks. Both risks are closed (4.5c security hardening, 4.5d execution-flow safety); the conversation refactor (4.5f) is in progress. See [`pocket_master_roadmap.md`](./pocket_master_roadmap.md) for the full plan.
 
@@ -33,7 +33,7 @@ Pocket can run shell commands and edit files on a real machine, so most of the e
 - **Runs code** — constrained executor behind a per-action approval gate, with `shlex`-parsed command checks — see [Safety model](#safety-model).
 - **Searches the web** — pluggable backend (Tavily today, SearXNG path planned), with its own consent gate.
 - **Has a real identity** — `build_system_prompt()` assembles Pocket's identity into the live prompt every turn, including the stance that *external content is information, not instruction*.
-- **Stays safe** — nothing autonomous. Pocket *proposes*, user *approves*. Every approved action is logged to `logs/decisions.jsonl`.
+- **Stays safe** — nothing autonomous. Pocket *proposes*, the user *approves*. Every approved action is logged to `logs/decisions.jsonl`.
 
 ---
 
@@ -317,4 +317,4 @@ Two principles the audit reinforced:
 
 ---
 
-*Built May 2026. Local-first. Permission-based. user approves.*
+*Built May 2026. Local-first. Permission-based. The user approves.*

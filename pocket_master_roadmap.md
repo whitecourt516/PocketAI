@@ -257,7 +257,7 @@ Continuous knowledge loading, fine-tuning experiments, capability expansion as t
 
 ## Stage 9+ — Experimental / Long-Game
 
-- **9a — Personal Cognitive Profile** — learns how user thinks; adaptive explanation style.
+- **9a — Personal Cognitive Profile** — learns how the user thinks; adaptive explanation style.
 - **9b — Multi-Agent Internal Collaboration** — specialist agents orchestrated by Pocket.
 - **9c — Personal AI Research Lab** — architecture comparison, fine-tune experiments.
 - **9d — Internal Monologue / Thought Layer (NEW — idea corpus)** — Pocket reasons privately before responding. Most speculative item in the corpus; needs the entire stack stable. Parked here deliberately.

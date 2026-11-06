@@ -12,9 +12,9 @@
 
 As of the tool-registry cut, every action Pocket takes is human-triggered. There
 is no path from an LLM response to the executor / file_editor / web search. Every
-tool runs because user typed a slash command.
+tool runs because the user typed a slash command.
 
-The slash path carries a trust assumption: *user typed it, so his invocation is
+The slash path carries a trust assumption: *the user typed it, so their invocation is
 the approval.* `/search` passes `require_approval=False`; `/exec` gates
 internally; `/edit` relies on backup-before-write. That assumption is correct for
 typed commands and **does not survive** the model emitting the call.

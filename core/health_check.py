@@ -2,7 +2,7 @@
 core/health_check.py — Stage 4j Startup Health Checks
 
 Runs health_check() on each registered module via the PocketModule interface (4s).
-Critical failures halt startup. Non-critical failures warn and prompt user to confirm.
+Critical failures halt startup. Non-critical failures warn and prompt the user to confirm.
 After all checks pass, emits a health_summary event to the avatar (for 4t overlay).
 """
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 # Each entry:
 #   name       — display label
 #   module_key — key to pull the live module instance from the registry dict
-#   critical   — if True, failure halts startup; if False, user is prompted
+#   critical   — if True, failure halts startup; if False, the user is prompted
 #
 SERVICE_REGISTRY = [
     {"name": "Ollama LLM",   "module_key": "llm",    "critical": True},
