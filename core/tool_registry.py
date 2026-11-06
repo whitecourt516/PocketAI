@@ -7,7 +7,7 @@ pocket.py's cli_input_loop().
 Each tool is one Tool entry: a command name (+ aliases), a handler, a
 human/model-facing description, and a JSON-schema for its parameters.
 
-For now the schema is METADATA. CLI commands are typed by user and arrive
+For now the schema is METADATA. CLI commands are typed by the user and arrive
 already-structured, so there is nothing malformed to reject — validation is not
 exercised on this path. The schema is here as a first-class field so the later
 natural-language dispatch cut (model emits a tool call → validate against this

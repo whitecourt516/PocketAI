@@ -63,7 +63,7 @@ from core.health_check import run_startup_checks
 from core.monitor import create_monitor
 from core.debug_overlay import DebugOverlay
 from pathlib import Path
-from core.config_loader import is_read_allowed
+from core.config_loader import is_read_allowed, CFG
 from core.executor import execute_command
 from core.backup_manager import restore_latest_backup
 from core.event_bus import bus
@@ -113,7 +113,7 @@ def _shutdown():
     websocket_module.stop()
     log.info("pocket", "Pocket signing off")
     logger_module.stop()
-    print("\n  [Pocket signing off. Later user.]\n")
+    print(f"\n  [Pocket signing off. Later{' ' + CFG['user_name'] if CFG['user_name'] else ''}.]\n")
     os._exit(0)
 
 
@@ -211,7 +211,7 @@ def _tool_search(args):
 
     print(f"  [Searching the web for: {query}]\n")
 
-    # user typed this himself — his invocation is the approval.
+    # The user typed this themselves — their invocation is the approval.
     result = search(query, require_approval=False)
 
     if not result["ok"]:
@@ -401,9 +401,11 @@ def cli_input_loop():
 # ═════════════════════════════════════════════════════════════════════════════
 
 def main():
-    print("\n╔══════════════════════════════════╗")
-    print("║   Pocket is online. Hey user.   ║")
-    print("╚══════════════════════════════════╝\n")
+    greeting = f"Pocket is online. Hey {CFG['user_name'] or 'there'}."
+    width = max(34, len(greeting) + 6)
+    print(f"\n╔{'═' * width}╗")
+    print(f"║{greeting.center(width)}║")
+    print(f"╚{'═' * width}╝\n")
 
     logger_module.start()
     log.info("pocket", "Pocket starting up")

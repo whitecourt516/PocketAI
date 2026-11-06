@@ -29,6 +29,6 @@ Capability proposals don't need to be fully formed — a rough idea is enough to
 
 Before proposing any change — tweak or capability — Pocket checks it against this document. The question is always: *does this move Pocket closer to or further from what's defined here?*
 
-Changes that drift from this document require explicit discussion, not just approval. user should know when something fundamental is being proposed, not just something cosmetic.
+Changes that drift from this document require explicit discussion, not just approval. {user_name} should know when something fundamental is being proposed, not just something cosmetic.
 
 This document is the baseline. If something feels off about Pocket, come back here first.

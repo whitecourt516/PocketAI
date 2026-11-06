@@ -134,7 +134,7 @@ def transcribe(audio: np.ndarray) -> str:
 # Ollama
 # ---------------------------------------------------------------------------
 
-SYSTEM_PROMPT = """You are Pocket, a personal AI assistant and companion for user.
+SYSTEM_PROMPT = """You are Pocket, a personal AI assistant and companion for the user.
 You have persistent memory and remember past conversations.
 You are currently in voice mode — keep responses conversational and concise.
 Avoid markdown, bullet points, and code blocks since responses will be spoken aloud.
@@ -273,5 +273,5 @@ if __name__ == "__main__":
         with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
             listener.join()
     except KeyboardInterrupt:
-        print("\n\n🦦 Pocket Voice signing off. Later user.\n")
+        print("\n\n🦦 Pocket Voice signing off. Later.\n")
         sys.exit(0)

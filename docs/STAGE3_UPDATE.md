@@ -102,7 +102,7 @@ The files Pocket will be able to edit to change its own appearance/behavior:
 | `main.js` CONFIG block | Wander speed, interval, window size, panel corner |
 | `pocket_avatar.py` POCKET_SYSTEM_PROMPT | Its own personality and instructions |
 
-Once `/read` is working in Stage 4, Pocket can examine these files, propose changes, and (with user's approval) write updates to them directly.
+Once `/read` is working in Stage 4, Pocket can examine these files, propose changes, and (with the user's approval) write updates to them directly.
 
 ---
 

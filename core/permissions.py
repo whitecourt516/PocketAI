@@ -131,7 +131,7 @@ class PermissionsModule(PocketModule):
                      then removes it. Returns False if the directory is
                      missing or the filesystem is read-only.
     on_event()     — no subscriptions; propose_action() is synchronous and
-                     requires user's direct input — it cannot be async.
+                     requires the user's direct input — it cannot be async.
     """
 
     def start(self) -> None:

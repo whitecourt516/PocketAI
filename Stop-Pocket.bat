@@ -19,5 +19,5 @@ if %errorlevel% equ 1 (
     echo  Containers stopped.
 )
 echo.
-echo  Done. Later user.
+echo  Done. Later.
 pause

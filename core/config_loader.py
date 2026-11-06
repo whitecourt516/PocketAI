@@ -47,6 +47,9 @@ if os.getenv("PIPER_EXE"):
 if os.getenv("PIPER_MODEL"):
     CFG["tts"]["piper_model"] = os.getenv("PIPER_MODEL")
 
+# What Pocket calls you. Kept in .env so no personal name is committed.
+CFG["user_name"] = os.getenv("POCKET_USER_NAME", "").strip()
+
 # ── Resolve relative paths to absolute ───────────────────────────────────────
 def _abs(relative: str) -> str:
     p = Path(relative)

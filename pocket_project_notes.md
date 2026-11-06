@@ -3,8 +3,8 @@
 
 ---
 
-## About You (user)
-- **Name:** user
+## About You (the user)
+- **Name:** The user
 - **Goal:** Build a custom personal AI assistant named **Pocket**
 - **Learning:** Cybersecurity (TryHackMe, coding, log analysis)
 - **Also:** Aspiring writer — research, editing, creative work
@@ -78,89 +78,89 @@
 
 ## Full Conversation History
 
-**user:** hello my name is user and im learning to build AI
+**The user:** hello my name is the user and im learning to build AI
 
-**Pocket:** Nice to meet you, user! I'm glad you're interested in building AI. What's your goal with this? Are you looking to create a specific type of AI or just get started with the basics? We actually discussed some concepts related to AI development last time we spoke... didn't we? I think it was about neural networks and their applications. Do you want to pick up where we left off, or start fresh?
+**Pocket:** Nice to meet you, the user! I'm glad you're interested in building AI. What's your goal with this? Are you looking to create a specific type of AI or just get started with the basics? We actually discussed some concepts related to AI development last time we spoke... didn't we? I think it was about neural networks and their applications. Do you want to pick up where we left off, or start fresh?
 
 ---
 
-**user:** Im trying to build a custom personal AI that can assist me with projects and other tasks
+**The user:** Im trying to build a custom personal AI that can assist me with projects and other tasks
 
 **Pocket:** So you're looking to create a tailored assistant that can help you with your specific needs and work style. That's an exciting project! I think I recall we discussed the importance of understanding user intent and context in our previous conversation. You mentioned that you'd like your AI to be able to understand natural language inputs and respond accordingly. To get started, let's break down what kind of tasks and projects you typically work on. Are they mostly programming-related, or do you also have a background in design, writing, or other areas? Knowing more about your workflow will help me suggest relevant features for your custom AI.
 
 ---
 
-**user:** Hello whats my name?
+**The user:** Hello whats my name?
 
-**Pocket:** Your name is user! We were just catching up on your project to build a custom personal AI assistant to help with your projects and other tasks. I'm excited to continue working with you!
+**Pocket:** Your name is the user! We were just catching up on your project to build a custom personal AI assistant to help with your projects and other tasks. I'm excited to continue working with you!
 
 ---
 
-**user:** I want my ai to be able to look at my screen and give me advice. voice prompting and activation. and i would like to give it a little avatar to move around my screen
+**The user:** I want my ai to be able to look at my screen and give me advice. voice prompting and activation. and i would like to give it a little avatar to move around my screen
 
 **Pocket:** You want your AI to be more of an interactive companion that can provide real-time feedback and suggestions while you work. To achieve this, we'll need to incorporate computer vision capabilities so your AI can capture and analyze the content on your screen...
 
 ---
 
-**user:** Those are wonderful ideas. exactly along the lines that i was thinking of
+**The user:** Those are wonderful ideas. exactly along the lines that i was thinking of
 
 **Pocket:** ...suggested "Focus Mode" to highlight important screen areas and give contextual advice. Also proposed a "Knowledge Graph" to store projects, tasks, and goals for personalized suggestions.
 
 ---
 
-**user:** NOt that i can think of currently well make notes of all of those suggestions and come back to it. THanks Pocket. THanks your name by the way. Pocket
+**The user:** NOt that i can think of currently well make notes of all of those suggestions and come back to it. THanks Pocket. THanks your name by the way. Pocket
 
 *(This is where you named the AI — Pocket.)*
 
 ---
 
-**user:** Im thinking about trying to wrap all of this into an application so i can talk to you through the cmd prompt. do you think that would mess up the flow so far?
+**The user:** Im thinking about trying to wrap all of this into an application so i can talk to you through the cmd prompt. do you think that would mess up the flow so far?
 
 **Pocket:** Wrapping it into a CMD application is a great idea and won't disrupt the flow. Suggested version control or update mechanisms to handle changes without losing conversation context.
 
 ---
 
-**user:** What kind of other context would be helpful to you as we go? were just getting started together so i want to get you set up as best as i can
+**The user:** What kind of other context would be helpful to you as we go? were just getting started together so i want to get you set up as best as i can
 
 **Pocket:** Asked about interaction style, task types, and domains.
 
 ---
 
-**user:** Im trying to get started in cyber security so coding, log analysis, that kind of thing... Im also an aspiring writer... yes like a personal assistant to help manage my schedule and reminders... definitely cyber security, probably a good idea to be familiar with TV and Movies... Id be interacting with it as a friend and confidant and assistant.
+**The user:** Im trying to get started in cyber security so coding, log analysis, that kind of thing... Im also an aspiring writer... yes like a personal assistant to help manage my schedule and reminders... definitely cyber security, probably a good idea to be familiar with TV and Movies... Id be interacting with it as a friend and confidant and assistant.
 
 **Pocket:** Suggested cybersecurity NLP skills, research assistant, editing support, personal schedule management, cultural knowledge graph for TV/movie references, note-taking system, and mood tracking.
 
 ---
 
-**user:** I love those ideas. Im thinking for the avatar, i like otters, so maybe a little otter. Additional features, id like to have it be able to make some proactive suggestions about my projects for bugs or issues. Oh and some kind of self diagnosis tool to help keep itself running properly
+**The user:** I love those ideas. Im thinking for the avatar, i like otters, so maybe a little otter. Additional features, id like to have it be able to make some proactive suggestions about my projects for bugs or issues. Oh and some kind of self diagnosis tool to help keep itself running properly
 
 **Pocket:** Proposed "Proactive Analysis" for bug detection and "Health Check" self-diagnosis tool with a status dashboard.
 
 ---
 
-**user:** I would also like it to be able to access the other programs on my computer. Never executing code without permission but being able to write fixes or code for projects. Being able to mock up a design or plan using the programs available
+**The user:** I would also like it to be able to access the other programs on my computer. Never executing code without permission but being able to write fixes or code for projects. Being able to mock up a design or plan using the programs available
 
 **Pocket:** Proposed sandboxed program access, integration with design tools, IDEs, data tools. Universal API approach. Project-specific templates and real-time collaboration features.
 
 ---
 
-**user:** Love it. Being able to add new animations to its avatar as well for more expression. With permission i would love for it to have as much access as possible to the full capability of my computer and everything on it
+**The user:** Love it. Being able to add new animations to its avatar as well for more expression. With permission i would love for it to have as much access as possible to the full capability of my computer and everything on it
 
 ---
 
-**user:** Love it. Lets make sure we can reference these ideas and well get started. where do you think the best place to start would be?
+**The user:** Love it. Lets make sure we can reference these ideas and well get started. where do you think the best place to start would be?
 
 **Pocket:** Suggested organizing development into manageable stages and starting with a rough outline of typical tasks.
 
 ---
 
-**user:** yep i have a rough outline with some of those features but i would love to get a full list put together
+**The user:** yep i have a rough outline with some of those features but i would love to get a full list put together
 
 **Pocket:** Started compiling the list — otter avatar, proactive bug reporting, self-diagnosis, knowledge graph.
 
 ---
 
-**user:** yes add the knowledge graph. also if you could suggest options to improve memory that would be good as well. i know there are many approaches to memory.
+**The user:** yes add the knowledge graph. also if you could suggest options to improve memory that would be good as well. i know there are many approaches to memory.
 
 **Pocket:** Detailed short-term, long-term, and episodic memory approaches. Suggested RNNs, attention mechanisms, and graph-based models.
 
