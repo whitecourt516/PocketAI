@@ -45,7 +45,6 @@ class StructuredLogger:
         log_dir defaults to logs/ in the project root.
         """
         if log_dir is None:
-            from core.config_loader import CFG
             project_root = CFG.get("paths", {}).get("project_root", ".")
             log_dir = os.path.join(project_root, "logs")
 

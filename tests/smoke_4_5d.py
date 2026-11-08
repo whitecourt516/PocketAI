@@ -31,10 +31,9 @@ def test_mutex_serializes():
         return "ok"
 
     with patch("core.orchestrator.chat", side_effect=fake_chat), \
-         patch.object(orchestrator.websocket_module, "send"), \
+         patch("core.orchestrator.bus"), \
          patch("core.orchestrator.save_memory"), \
-         patch("core.orchestrator.get_relevant_memories", return_value=""), \
-         patch("core.orchestrator.tts_queue"):
+         patch("core.orchestrator.get_relevant_memories", return_value=""):
         threads = [
             threading.Thread(target=llm.handle_user_input_sync, args=(f"msg {i}",))
             for i in range(5)

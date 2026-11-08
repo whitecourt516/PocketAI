@@ -15,9 +15,9 @@
 # monitor from double-reporting the same outage.
 #
 # Imports: state/bus/log are safe at load time (none import this module).
-# websocket_module and tts_queue are imported lazily inside notify() to avoid
-# the import cycle (tts -> degradation -> tts) — same trick llm.py already uses
-# for avatar_router.
+# 4.5g: notify() reaches the avatar and voice over the event bus
+# ("websocket.send" / "tts.speak"), not by importing websocket_server / tts.
+# That removes the tts -> degradation -> tts cycle the lazy imports dodged.
 
 import threading
 
@@ -57,23 +57,16 @@ def notify(message: str, expression: str = "concerned") -> None:
     """
     print(f"\n  [Pocket] {message}\n")
 
-    # Avatar — lazy import breaks the cycle. Uses the {"type","value"} schema
-    # the conversational path already uses (not the {"command"} schema).
-    try:
-        from core.websocket_server import websocket_module
-        websocket_module.send({"type": "expression", "value": expression})
-        websocket_module.send({"type": "speech", "text": message, "duration": 5000})
-    except Exception:
-        pass  # avatar is best-effort; never let it bubble
+    # Avatar — best-effort. Uses the {"type","value"} schema the conversational
+    # path already uses (not the {"command"} schema). bus.emit never raises:
+    # a failing handler is caught and logged inside the bus.
+    bus.emit("websocket.send", {"data": {"type": "expression", "value": expression}})
+    bus.emit("websocket.send", {"data": {"type": "speech", "text": message, "duration": 5000}})
 
     # Voice — only if Piper isn't the thing that failed. Health is None until
     # checked, so "is not False" means "speak unless we know it's down".
     if state.get("health", "piper") is not False:
-        try:
-            from core.tts import tts_queue
-            tts_queue.put(message)
-        except Exception:
-            pass
+        bus.emit("tts.speak", {"text": message})
 
 
 def mark_degraded(service: str, reason: str = "") -> None:

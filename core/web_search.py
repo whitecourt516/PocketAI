@@ -30,6 +30,7 @@
 import os
 
 from core.config_loader import CFG
+from core.event_bus import bus
 from core.permissions import log_decision, record_outcome
 from core.pocket_module import PocketModule
 
@@ -234,11 +235,14 @@ class WebSearchModule(PocketModule):
             return
         result = search(text)  # require_approval=True — Pocket-initiated
         if result["ok"]:
-            from core.llm import handle_user_input_sync  # lazy — avoids import cycle
-            handle_user_input_sync(
-                f"I searched the web for: {text}\n\n"
-                f"Here are the results:\n\n{format_for_llm(result)}"
-            )
+            # 4.5g: hand the results to the LLM over the bus (no lazy import of
+            # core.llm). persist=False matches /search: web results stay out of
+            # vector memory.
+            bus.emit("llm.query", {
+                "text": (f"I searched the web for: {text}\n\n"
+                         f"Here are the results:\n\n{format_for_llm(result)}"),
+                "persist": False,
+            })
 
 
 web_search_module = WebSearchModule()

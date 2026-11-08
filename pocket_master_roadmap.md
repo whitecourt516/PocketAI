@@ -1,8 +1,8 @@
-# Pocket — Master Project Roadmap (v2.3, 4.5f order reconciled)
+# Pocket — Master Project Roadmap (v2.4, Stage 4.5 complete)
 
 **Setup:** Ollama | 10–12GB VRAM | Windows Host | Docker Compose
 **Goal:** A fully local, voice-enabled personal AI companion with persistent memory, screen awareness, code execution, and a visual avatar that grows alongside you.
-**Last updated:** November 8, 2026 — 4.5f state verified against the code and the cut order reconciled (NL dispatch next; dead Monitor param + A4 bundled as the closing cut); 4.5g decided (commit to the event bus); model evaluation moved to after Stage 4.5 is fully complete. October 23, 2026 — Oct 2026 landscape review applied (edits E1–E8: model evaluation, Live2D gate, voice refresh, 5d/5a, 6a, 6f/6g/6h, Stage 7/8c/9d). Status: 4.5f in progress (tool registry + ADR-001 done). June 27, 2026 — status refreshed through 4.5e; June improvements list integrated and retired. Base audit: May 31, 2026 (`docs/planning/audit-2026-05-31.md`).
+**Last updated:** November 8, 2026 (later) — Stage 4.5 complete: 4.5f closed (NL dispatch + Monitor/A4 closing cut) and 4.5g built (conversation/avatar/TTS output on the event bus). Next: model evaluation (qwen3.5:9b expected). Earlier the same day — 4.5f state verified against the code and the cut order reconciled (NL dispatch next; dead Monitor param + A4 bundled as the closing cut); 4.5g decided (commit to the event bus); model evaluation moved to after Stage 4.5 is fully complete. October 23, 2026 — Oct 2026 landscape review applied (edits E1–E8: model evaluation, Live2D gate, voice refresh, 5d/5a, 6a, 6f/6g/6h, Stage 7/8c/9d). Status: 4.5f in progress (tool registry + ADR-001 done). June 27, 2026 — status refreshed through 4.5e; June improvements list integrated and retired. Base audit: May 31, 2026 (`docs/planning/audit-2026-05-31.md`).
 
 > **What changed in v2:** A 6-stage audit (roadmap↔code, architecture, execution trace, security, idea-corpus, reconciliation) was run against the real codebase. It found the foundation genuinely solid but four "complete" items overstated, two real risks, and a class of frontend/infra issues the original roadmap never tracked. This version inserts **Stage 4.5 — Audit Remediation** between Stage 4 and the Live2D gate, re-homes the idea-corpus ideas at the stages where their foundations actually get built, and corrects two Stage 1–4 status claims.
 >
@@ -26,7 +26,8 @@
 |Permission gate + decision log|✅ Running|`propose_action()` → y/n → `logs/decisions.jsonl`|
 |Web search|✅ Running|Tavily backend, pluggable to SearXNG|
 |Turn mutex (`TurnManager`)|✅ Live|Full-turn lock: retrieval → LLM → write → dispatch. `exclusive()` reserved for 6h.1 consolidation (4.5d)|
-|Event bus / state manager / lifecycle contract|⚠️ Built, under-used|Foundations exist (4q/4r/4s); conversation path still on direct imports (see 4.5f/4.5g)|
+|Event bus / state manager / lifecycle contract|✅ Live|Conversation/avatar/TTS output and degradation notices go over the bus via `EVENT_WIRING` in `pocket.py` (4.5g); all 14 modules start/stop through the lifecycle contract (A4, 4.5f)|
+|NL tool dispatch|✅ Live (typed turns)|Model tool calls (`memory`, `read`, `search`) schema-validated and gated through `propose_action()` (ADR-001, 4.5f). Voice turns get tools once the app has its own approval prompt|
 |n8n|✅ Running|Staged for Stage 7 webhook integration|
 |Git repo + CHANGELOG + requirements.txt|✅ Done|Stage 4 + identity reconciliation committed; venv reproducible (Python 3.13, 4.5e/A8)|
 
@@ -59,16 +60,16 @@ Stage 4 — Architecture Hardening + Self-Improvement      ✅ COMPLETE
     ↓
 ═══════════ AUDIT — 2026-05-31 ═══════════
     ↓
-Stage 4.5 — Audit Remediation                            ◀ IN PROGRESS
+Stage 4.5 — Audit Remediation                            ✅ COMPLETE
     4.5a  Identity reconciliation ................. ✅ DONE
     4.5b  Decoupled launcher ...................... ✅ DONE
     4.5c  Security hardening ...................... ✅ DONE
     4.5d  Execution-flow safety (mutex, timeouts) . ✅ DONE
     4.5e  Hygiene & consistency (A1–A8) .......... ✅ DONE (A4 → 4.5f)
-    4.5f  Conversation refactor (the big one) .... ◀ IN PROGRESS (NL dispatch next)
-    4.5g  Communication-model decision ........... ⬜ DECIDED: commit to the bus (build pending)
+    4.5f  Conversation refactor (the big one) .... ✅ DONE
+    4.5g  Communication-model decision ........... ✅ DONE (committed to the bus)
     ↓
-Near-Term — Model evaluation: Qwen3 vs Qwen3.5 (impr. #1) ⬜ queued (after 4.5 complete)
+Near-Term — Model evaluation: Qwen3 vs Qwen3.5 (impr. #1) ◀ NEXT
     ↓
 ⛔ HARD STOP — Real Live2D otter model (+ A9: PNG can't render the 9 expressions)
     ↓
@@ -103,7 +104,7 @@ Full historical detail lives in the prior roadmap and `docs/stage-retrospectives
 
 ---
 
-## Stage 4.5 — Audit Remediation ◀ IN PROGRESS
+## Stage 4.5 — Audit Remediation ✅ COMPLETE (2026-11-08)
 
 > **Order rationale:** safety and the structural refactor first (4.5c–g) because they protect and unblock everything after; hygiene (4.5e) folded alongside since it's cheap and several items feed the refactor. 4.5a/4.5b already done.
 
@@ -151,12 +152,12 @@ The audit's headline finding: the executor's safety boundary was theater. Empiri
 - **A7** ✅ — unused `memory-chat` Docker service removed (engine uses embedded `PersistentClient`).
 - **A8** ✅ — engine migrated to local Python 3.13 venv; `requirements.txt` reproducible; `Start-Engine.bat` warns loudly if `.venv` is missing.
 
-### 4.5f — Conversation Refactor (the big structural one — before Stage 5) ◀ IN PROGRESS
+### ✅ 4.5f — Conversation Refactor (DONE 2026-11-08)
 
 > This is where the idea corpus's "Stage 5.5 — Conversation Orchestration" and "Prompt Assembly Pipeline" land. Scoped *down*: build the 2 modules that matter, not the proposed 10.
 
 **Cut order (reconciled 2026-11-08, verified against the code):**
-1. ✅ `llm.py` split → 2. ✅ retrieval + compression seams → 3. ✅ tool registry → 4. ✅ ADR-001 → **5. NL dispatch ◀ NEXT** → 6. closing cut: dead Monitor param + A4 together.
+1. ✅ `llm.py` split → 2. ✅ retrieval + compression seams → 3. ✅ tool registry → 4. ✅ ADR-001 → 5. ✅ NL dispatch (`3c86fb6` seam, `ed36932` wiring) → 6. ✅ closing cut: dead Monitor param + A4 (`077a514`).
 
 > *Why this changed:* the original plan had the Monitor param and A4 as "do-first" and A4 riding with the `llm.py` split. The split shipped **without** A4 (deliberately re-sequenced in the 4.5f setup), so neither is done. Both edit the `pocket.py` startup block (`main()`), not the orchestrator, so they go together as one cut to avoid opening that block twice.
 
@@ -173,21 +174,22 @@ The audit's headline finding: the executor's safety boundary was theater. Empiri
   - **Schema-first contract (impr. #2):** build the registry so every tool carries an explicit JSON schema validated *on receipt* before any execution attempt, with a re-request cycle on malformed output rather than a silent try/except. Reliability comes from the schema discipline, not the model — the schema is the hard boundary.
 - ✅ **Decide the agent→tool path explicitly** (DONE — ADR-001, `docs/planning/adr-agent-tool-path.md`) — model-selected tool calls route uniformly through `propose_action()`; core invariant "model invocation ≠ approval." Slash commands typed by Eddie are themselves approval. The `risk` field stays metadata-only until 8p.
   - **LLM-out-of-execution-loop is the architecture, not a convention (impr. #3):** the LLM decides *what*, deterministic code handles *how*. The registry defines legal call shapes; the executor only accepts validated calls; nothing else gets through. The 4.5c constrained executor + `propose_action()` gate already implement this correctly — the rule here is *don't soften it*: no broad try/except, no fallback execution paths that route around the gate.
-- **Natural-language tool dispatch** ◀ NEXT — thin layer on the registry: expose registered tools as model-callable schemas so plain-language requests map to a *proposed* tool call routed through `propose_action()` (still y/n; slash commands kept as the fast path). Rides after the registry + 4.5c. The actual fix for the "everything is a manual slash command" friction.
+- ✅ **Natural-language tool dispatch** (DONE — `core/nl_dispatch.py`; tools opted in with `model_callable` + `model_handler`: `memory`, `read`, `search`; typed turns only, since `propose_action()` reads stdin; undeclared args dropped before validation after Llama invented `db_name`; `tests/probe_nl_dispatch.py` is the live-model probe) — thin layer on the registry: expose registered tools as model-callable schemas so plain-language requests map to a *proposed* tool call routed through `propose_action()` (still y/n; slash commands kept as the fast path). Rides after the registry + 4.5c. The actual fix for the "everything is a manual slash command" friction.
   - **Use Ollama's native tool API (Oct 2026 review):** pass the registry's schemas as the `tools` array on `/api/chat` and read structured `tool_calls` back. Ollama does **not** validate arguments against the schema, so validate-on-receipt (impr. #2) stays the hard boundary. Keep `params_schema` as plain JSON Schema so the Stage 7 MCP adapter is free.
   - **Thinking control via the API:** for Qwen-family models, pass `think: false` per request through `ollama_client.py` (reasoning comes back in a separate `message.thinking` field). Keep the `<think>` strip before TTS/avatar as a backstop.
   - **First cut (seam, no behavior change):** add `ToolRegistry.to_ollama_tools()` (registry → Ollama `tools` array) and `tools` / `think` passthrough params on the `ollama_client.py` chat call. Nothing sends them yet. Second cut wires `tool_calls` parsing → schema validation → `propose_action()` in the orchestrator.
   - **Structured output for non-tool JSON:** Ollama's `format` parameter accepts a JSON Schema and constrains decoding — use it for later JSON tasks (6h write-time memory decisions).
 
-### 4.5g — Communication-Model Decision
+### ✅ 4.5g — Communication-Model Decision (DONE 2026-11-08)
 
 - Commit the conversation/avatar/TTS path to the event bus (kills the real `tts ↔ degradation` cycle and the lazy-import dodges scattered through `llm`/`degradation`/`health_check` — e.g. the `from core.avatar_router import send_to_avatar` lazy import inside `_run_turn`), **or** formally retire the bus. Running both half-heartedly is the current worst case. Do this before Stage 5 multiplies event sources.
 
-- **DECIDED (2026-11-08): commit to the bus** (Eddie approved the review's recommendation). Build pending, after 4.5f closes.
+- **DECIDED (2026-11-08): commit to the bus** (Eddie approved the review's recommendation).
+- **BUILT:** the orchestrator emits `websocket.send` → `avatar_router.send` → `tts.speak` (in that order; `bus.emit` is synchronous), and `degradation.notify()` uses the same events, so the `tts ↔ degradation` cycle and the lazy imports in orchestrator / degradation / web_search / logger are gone. All subscriptions live in one `EVENT_WIRING` table in `pocket.py`, wired before any module starts. `web.search` / `llm.query` / `memory.store` stay unwired until something emits them. Tests: `tests/smoke_4_5g.py`.
 - **Recommendation (Oct 2026 review):** commit to the bus. Comparable companion projects (Open-LLM-VTuber, AIRI) run voice → expression → TTS as one streamed event pipeline; retiring the bus would leave Stage 5's new event sources (screen, idle, prefetch) on lazy imports.
 
 ### Bookmark
-🔖 *"Let's do the conversation refactor (4.5f) before Stage 5"*
+🔖 *"Let's do the model evaluation"* (Stage 4.5 is done)
 
 ---
 
@@ -421,18 +423,18 @@ Ten items from model/methodology research, folded into the stages above. This ta
 * [x] `/read`+`/search` stop auto-persisting to memory (4.5d)
 * [x] A1 WS schema unified · A2 monitor logging · A3 config paths + logger · A5 name collision · A6 dup imports · A7 unused Docker svc · A8 venv (4.5e)
 
-### Stage 4.5f — in progress
+### Stage 4.5f — ✅ done
 * [x] Prompt assembly seam + compression hook passthrough (4.5f, impr. #5); remaining sections are Stage 6
 * [x] `llm.py` split: client / orchestrator / turn_manager
 * [x] Retrieval made separable/injectable for prefetch (4.5f, impr. #4)
 * [x] Tool registry replaces if/elif chain + schema-first validation (4.5f, impr. #2)
 * [x] Agent→tool path decided + documented — ADR-001 (4.5f, impr. #3)
-* [ ] **NEXT:** Natural-language tool dispatch over the registry, behind the permission gate (Ollama `tools` + `think: false`)
-* [ ] Closing cut: dead Monitor param cleanup + A4 generic lifecycle loop (both in `pocket.py` startup)
+* [x] Natural-language tool dispatch over the registry, behind the permission gate (Ollama `tools`; `think` passthrough ready for Qwen)
+* [x] Closing cut: dead Monitor param cleanup + A4 generic lifecycle loop (both in `pocket.py` startup)
 
 ### Stage 4.5g
 * [x] Decision: commit to the event bus (2026-11-08)
-* [ ] Conversation/avatar/TTS path committed to the event bus (kills lazy-import dodges)
+* [x] Conversation/avatar/TTS path committed to the event bus (kills lazy-import dodges)
 
 ### Near-term
 * [ ] Model evaluation: qwen3:8b vs qwen3.5:9b vs Llama 3.1 baseline — smoke test + tool-call set; `think: false` via API; strip `<think>` backstop; explicit `num_ctx` (impr. #1)
@@ -473,6 +475,8 @@ Principles reinforced by the audit:
 - **Track "expected UX right now," not just what's wired.** A real felt friction can be a planned-later rather than a defect-now — a one-line "expected UX at this stage" note lets a feeling be checked against intent without a code dig.
 
 ---
+
+*v2.4 — November 8, 2026 (later). Stage 4.5 complete: NL dispatch live behind the gate, A4 lifecycle loop + dead Monitor param done, 4.5g event-bus commit built. Model evaluation is next.*
 
 *v2.3 — November 8, 2026. 4.5f verified against the code: split, seams, registry, ADR-001 done; NL dispatch next; dead Monitor param + A4 bundled as the closing cut (the split shipped without A4). 4.5g decided: commit to the event bus. Model evaluation moved to after 4.5 is fully complete.*
 

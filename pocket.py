@@ -103,6 +103,31 @@ LIFECYCLE = [
 ]
 _started = []  # modules whose start() ran, in order — stopped in reverse
 
+# ── Event wiring (4.5g) ───────────────────────────────────────────────────────
+# The ONE place bus subscriptions are made. Producers emit; they never import
+# the consumer. Within one event type, handlers run in the order listed here.
+EVENT_WIRING = [
+    # Conversation + degradation output (orchestrator / degradation.notify)
+    ("websocket.send",     websocket_module.on_event),
+    ("avatar_router.send", avatar_router_module.on_event),
+    ("tts.speak",          tts_module.on_event),
+    # Reserved, NOT wired until something emits them (no unused entry points):
+    #   "web.search" → web_search_module (5b) · "llm.query" → llm_module
+    #   "memory.store" → memory_module
+    # WebSocket connection lifecycle (4n) → logging (4i) + degradation (4k)
+    ("connection.websocket.connected",    logger_module.on_event),
+    ("connection.websocket.disconnected", logger_module.on_event),
+    ("connection.websocket.reconnecting", logger_module.on_event),
+    ("connection.websocket.degraded",     logger_module.on_event),
+    ("connection.websocket.degraded",     on_websocket_degraded),
+    ("connection.websocket.connected",    on_websocket_connected),
+]
+
+
+def wire_events():
+    for event_type, handler in EVENT_WIRING:
+        bus.subscribe(event_type, handler)
+
 def altd_listener():
     """Alt+D hotkey — prints a one-shot debug overlay snapshot."""
     from pynput import keyboard
@@ -492,19 +517,13 @@ def main():
     print(f"║{greeting.center(width)}║")
     print(f"╚{'═' * width}╝\n")
 
+    wire_events()  # before any module starts, so startup-time events aren't dropped
+
     for module in LIFECYCLE:
         module.start()
         _started.append(module)
         if module is logger_module:
             log.info("pocket", "Pocket starting up")
-
-    bus.subscribe("connection.websocket.connected",    logger_module.on_event)
-    bus.subscribe("connection.websocket.disconnected", logger_module.on_event)
-    bus.subscribe("connection.websocket.reconnecting", logger_module.on_event)
-    bus.subscribe("connection.websocket.degraded",     logger_module.on_event)
-
-    bus.subscribe("connection.websocket.degraded",  on_websocket_degraded)
-    bus.subscribe("connection.websocket.connected", on_websocket_connected)
 
     # F9 keyboard listener thread
     kb_thread = threading.Thread(

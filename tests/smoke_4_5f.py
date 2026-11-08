@@ -256,10 +256,8 @@ def test_run_turn_paths():
     import core.orchestrator as orchestrator
 
     common = [
-        patch.object(orchestrator.websocket_module, "send"),
+        patch("core.orchestrator.bus"),  # 4.5g: output goes over the bus
         patch("core.orchestrator.get_relevant_memories", return_value=""),
-        patch("core.orchestrator.tts_queue"),
-        patch("core.avatar_router.send_to_avatar"),
     ]
     for p in common:
         p.start()

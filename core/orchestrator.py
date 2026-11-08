@@ -15,11 +15,16 @@
 # 4.5f: extracted from llm.py's _run_turn. Transport (ollama_client) sits
 # below this; the mutex (TurnManager) sits above. Memory / degradation /
 # dispatch policy lives here.
+#
+# 4.5g: output goes out over the event bus, never by direct import. The turn
+# emits "websocket.send" / "avatar_router.send" / "tts.speak"; pocket.py's
+# EVENT_WIRING routes them to each module's on_event(). Delivery order is the
+# emit order below (expression → avatar text → voice), and bus.emit is
+# synchronous, so ordering is the same as the old direct calls.
 
 from persona.prompt_loader import build_system_prompt
 from core.memory import get_relevant_memories, save_memory
-from core.websocket_server import websocket_module
-from core.tts import tts_queue
+from core.event_bus import bus
 from core.degradation import mark_degraded, mark_recovered
 from core.ollama_client import chat
 from core.nl_dispatch import TOOL_GUIDANCE, run_with_tools
@@ -67,8 +72,8 @@ def run_turn(
     """
     global session_history
 
-    websocket_module.send({"type": "expression", "value": "thinking"})
-    websocket_module.send({"type": "wander_pause"})
+    bus.emit("websocket.send", {"data": {"type": "expression", "value": "thinking"}})
+    bus.emit("websocket.send", {"data": {"type": "wander_pause"}})
 
     # CHANGED: retrieval is injectable — prefetch feeds in, else retrieve inline.
     past        = prefetched if prefetched is not None else get_relevant_memories(text)
@@ -92,7 +97,7 @@ def run_turn(
     except Exception as e:
         # Ollama unreachable / errored — degrade gracefully instead of dying.
         mark_degraded("ollama", str(e))
-        websocket_module.send({"type": "wander_resume"})
+        bus.emit("websocket.send", {"data": {"type": "wander_resume"}})
         return
 
     mark_recovered("ollama")  # no-op unless Ollama had been down
@@ -110,7 +115,5 @@ def run_turn(
 
     print(f"\nPocket: {reply}\n")
 
-    from core.avatar_router import send_to_avatar
-    send_to_avatar(reply)
-
-    tts_queue.put(reply)
+    bus.emit("avatar_router.send", {"text": reply})  # expression + subtitle + panel
+    bus.emit("tts.speak",          {"text": reply})  # then voice

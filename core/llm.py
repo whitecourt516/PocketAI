@@ -119,13 +119,14 @@ class LLMModule(PocketModule):
             return False
 
     def on_event(self, event: dict) -> None:
-        # Supported event: {"type": "llm.query", "text": "..."}
-        # Reserved for 4q — direct text queries routed through the bus.
+        # Supported event: {"type": "llm.query", "text": "...", "persist": bool}
+        # Bus-driven turns (e.g. web.search results). Never emit this from
+        # inside a turn: the turn mutex isn't reentrant.
         if event.get("type") != "llm.query":
             return
         text = event.get("text", "")
         if text:
-            handle_user_input_sync(text)
+            handle_user_input_sync(text, persist=event.get("persist", True))
 
 
 llm_module = LLMModule()
