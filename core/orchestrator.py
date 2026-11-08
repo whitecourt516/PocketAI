@@ -3,7 +3,8 @@
 #
 # Owns:
 #   session_history          — list of chat turns (mutable, shared state)
-#   run_turn(text, persist)  — the full turn pipeline
+#   run_turn(text, persist, prefetched=None, allow_tools=False)
+#                            — the full turn pipeline
 #
 # This is the seam every Stage 6 feature plugs into. The pipeline runs under
 # the turn mutex held by core.llm.TurnManager — run_turn itself does no
@@ -21,6 +22,7 @@ from core.websocket_server import websocket_module
 from core.tts import tts_queue
 from core.degradation import mark_degraded, mark_recovered
 from core.ollama_client import chat
+from core.nl_dispatch import TOOL_GUIDANCE, run_with_tools
 
 
 # ── Session state ─────────────────────────────────────────────────────────────
@@ -35,7 +37,12 @@ session_history = []
 def compress_context(chunks: str) -> str:
     return chunks
 
-def run_turn(text: str, persist: bool = True, prefetched: str | None = None) -> None:
+def run_turn(
+    text: str,
+    persist: bool = True,
+    prefetched: str | None = None,
+    allow_tools: bool = False,
+) -> None:
     """The turn pipeline. Runs under the turn mutex (see core.llm.TurnManager).
 
     Everything from memory retrieval through memory write and dispatch lives
@@ -53,6 +60,10 @@ def run_turn(text: str, persist: bool = True, prefetched: str | None = None) -> 
                     prefetch). None → not provided → retrieve inline (the only
                     path today). Either way the result is consumed here, under
                     the mutex, so retrieval-through-write stays serialized.
+    allow_tools   — offer model-callable tools (4.5f NL dispatch, ADR-001).
+                    Any tool call the model makes is schema-validated and
+                    routed through propose_action() in core.nl_dispatch. A turn
+                    where a tool ran is treated as persist=False, like /read.
     """
     global session_history
 
@@ -63,13 +74,21 @@ def run_turn(text: str, persist: bool = True, prefetched: str | None = None) -> 
     past        = prefetched if prefetched is not None else get_relevant_memories(text)
     past        = compress_context(past)  # CHANGED: passthrough seam (impr. #5)
     full_system = build_system_prompt() + (f"\n\n{past}" if past else "")
+    if allow_tools:
+        full_system += f"\n\n{TOOL_GUIDANCE}"
 
     messages = [{"role": "system", "content": full_system}]
     messages += session_history
     messages.append({"role": "user", "content": text})
 
+    tool_messages = []  # assistant tool_call + tool result pairs from this turn
     try:
-        reply = chat(messages)
+        if allow_tools:
+            reply, tool_messages, tool_ran = run_with_tools(messages)
+            if tool_ran:
+                persist = False  # tool output (file/web) stays out of vector memory
+        else:
+            reply = chat(messages)
     except Exception as e:
         # Ollama unreachable / errored — degrade gracefully instead of dying.
         mark_degraded("ollama", str(e))
@@ -81,6 +100,7 @@ def run_turn(text: str, persist: bool = True, prefetched: str | None = None) -> 
     # Injected content joins session_history regardless of persist, so the
     # next turn can still reference the file/search results in-session.
     session_history.append({"role": "user",      "content": text})
+    session_history.extend(tool_messages)  # keeps tool results for follow-ups
     session_history.append({"role": "assistant",  "content": reply})
 
     # ...but only normal turns are committed to permanent vector memory.

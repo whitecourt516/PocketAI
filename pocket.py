@@ -139,8 +139,17 @@ def _tool_load(args):
     load_knowledge_file(args)
 
 
-def _tool_read(args):
-    filepath = args
+# Formats /read can't handle as plain text (need parsing, not decoding)
+_BINARY_SUFFIXES = {".docx", ".doc", ".pdf", ".xlsx", ".xls",
+                    ".pptx", ".ppt", ".zip", ".png", ".jpg", ".jpeg", ".gif"}
+
+
+def _load_text_file(filepath):
+    """Shared by /read and the model's read tool (4.5f NL dispatch).
+
+    Returns (content, path, error). On success error is None; on failure
+    content is None and error is the message to show.
+    """
     path = (
         Path(filepath)
         if Path(filepath).is_absolute()
@@ -148,36 +157,41 @@ def _tool_read(args):
     )
 
     if not is_read_allowed(str(path)):
-        print(f"  [/read blocked: {filepath} is on the denylist]\n")
-        return
-
-    # Formats /read can't handle as plain text (need parsing, not decoding)
-    _BINARY_SUFFIXES = {".docx", ".doc", ".pdf", ".xlsx", ".xls",
-                        ".pptx", ".ppt", ".zip", ".png", ".jpg", ".jpeg", ".gif"}
+        return None, path, f"/read blocked: {filepath} is on the denylist"
 
     try:
         if path.suffix.lower() in _BINARY_SUFFIXES:
-            print(f"  [/read: {path.suffix} is a binary/office format — "
-                  f"/read handles plain text only for now.]\n")
-            return
+            return None, path, (f"/read: {path.suffix} is a binary/office format — "
+                                f"/read handles plain text only for now.")
 
         try:
             content = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             content = path.read_text(encoding="cp1252")  # Windows-saved text fallback
 
-        print(f"  [Loaded: {path} ({len(content)} chars)]\n")
-
-        handle_user_input_sync(
-            f"I'm showing you this file: {filepath}\n\n```\n{content}\n```",
-            persist=False,
-        )
+        return content, path, None
 
     except FileNotFoundError:
-        print(f"  [File not found: {path}]\n")
+        return None, path, f"File not found: {path}"
 
     except Exception as e:
-        print(f"  [/read error: {e}]\n")
+        return None, path, f"/read error: {e}"
+
+
+def _tool_read(args):
+    filepath = args
+    content, path, error = _load_text_file(filepath)
+
+    if error:
+        print(f"  [{error}]\n")
+        return
+
+    print(f"  [Loaded: {path} ({len(content)} chars)]\n")
+
+    handle_user_input_sync(
+        f"I'm showing you this file: {filepath}\n\n```\n{content}\n```",
+        persist=False,
+    )
 
 
 def _tool_edit(args):
@@ -253,8 +267,40 @@ def _tool_rollback(args):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Tool registry — schema-first. Schemas are METADATA on this cut; the NL-dispatch
-# cut validates against them and routes high-risk calls through propose_action().
+# Model-path handlers (4.5f NL dispatch) — take the schema-validated args dict
+# and RETURN text for the model. They run inside the current turn, after
+# propose_action() approved the call, so they must never start a new turn
+# (handle_user_input_sync would deadlock on the turn mutex).
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _model_memory(args):
+    return f"Memory holds {memory.count()} entries in ChromaDB."
+
+
+def _model_read(args):
+    filepath = args["filepath"]
+    content, path, error = _load_text_file(filepath)
+    if error:
+        return f"Could not read the file. {error}"
+    print(f"  [Loaded: {path} ({len(content)} chars)]\n")
+    return f"Contents of {filepath}:\n\n```\n{content}\n```"
+
+
+def _model_search(args):
+    query = args["query"]
+    print(f"  [Searching the web for: {query}]\n")
+    # Approval already happened in propose_action() (ADR-001); don't ask twice.
+    result = search(query, require_approval=False)
+    if not result["ok"]:
+        return f"Web search failed: {result['error']}"
+    return format_for_llm(result)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Tool registry — schema-first. Typed slash commands use `handler` (typing it is
+# the approval). Model-callable tools also carry a `model_handler`; the model's
+# calls are validated against params_schema and ALL go through propose_action()
+# (core/nl_dispatch.py, ADR-001).
 # ═════════════════════════════════════════════════════════════════════════════
 
 registry.register(Tool(
@@ -281,7 +327,8 @@ registry.register(Tool(
     description="Report how many entries are stored in ChromaDB.",
     risk="low",
     model_callable=True,  # 4.5f NL dispatch: exposed to the model, still gated
-    params_schema={"type": "object", "properties": {}},
+    model_handler=_model_memory,
+    params_schema={"type": "object", "properties": {}, "additionalProperties": False},
 ))
 
 registry.register(Tool(
@@ -308,10 +355,12 @@ registry.register(Tool(
     usage="[/read requires a filepath]",
     risk="low",
     model_callable=True,  # 4.5f NL dispatch: exposed to the model, still gated
+    model_handler=_model_read,
     params_schema={
         "type": "object",
-        "properties": {"filepath": {"type": "string", "description": "Text file to read"}},
+        "properties": {"filepath": {"type": "string", "minLength": 1, "description": "Text file to read"}},
         "required": ["filepath"],
+        "additionalProperties": False,
     },
 ))
 
@@ -339,10 +388,12 @@ registry.register(Tool(
     usage="[/search requires a query]",
     risk="low",
     model_callable=True,  # 4.5f NL dispatch: exposed to the model, still gated
+    model_handler=_model_search,
     params_schema={
         "type": "object",
-        "properties": {"query": {"type": "string", "description": "Web search query"}},
+        "properties": {"query": {"type": "string", "minLength": 1, "description": "Web search query"}},
         "required": ["query"],
+        "additionalProperties": False,
     },
 ))
 
@@ -397,7 +448,7 @@ def cli_input_loop():
         if registry.dispatch(user_input):
             continue
 
-        handle_user_input_sync(user_input)
+        handle_user_input_sync(user_input, allow_tools=True)
 
 # ═════════════════════════════════════════════════════════════════════════════
 # MAIN

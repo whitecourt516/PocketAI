@@ -47,9 +47,9 @@ class TurnManager:
     def __init__(self):
         self._lock = threading.Lock()
 
-    def run(self, text: str, persist: bool = True) -> None:
+    def run(self, text: str, persist: bool = True, allow_tools: bool = False) -> None:
         with self._lock:
-            orchestrator.run_turn(text, persist)
+            orchestrator.run_turn(text, persist, allow_tools=allow_tools)
 
     @contextlib.contextmanager
     def exclusive(self):
@@ -66,15 +66,19 @@ turn_manager = TurnManager()
 # PUBLIC TURN API
 # ═════════════════════════════════════════════════════════════════════════════
 
-def handle_user_input_sync(text: str, persist: bool = True):
+def handle_user_input_sync(text: str, persist: bool = True, allow_tools: bool = False):
     """Public entry point for a turn. Serialized through the turn mutex.
 
     persist=True  — normal conversation; written to ChromaDB.
     persist=False — context-injection turn (/read, /search); joins
                     session_history but not permanent vector memory.
+    allow_tools   — offer model-callable tools this turn (4.5f NL dispatch).
+                    Typed CLI turns only for now: the y/n gate reads stdin, and
+                    a voice turn runs on the F9 thread while the main thread is
+                    already blocked in input("You: ").
     See core.orchestrator.run_turn for the pipeline and the full persist note.
     """
-    turn_manager.run(text, persist)
+    turn_manager.run(text, persist, allow_tools)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

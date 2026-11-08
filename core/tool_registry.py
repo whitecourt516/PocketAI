@@ -37,6 +37,7 @@ class Tool:
     arg_hint: str = ""                         # placeholder for the help line, e.g. "<file>"
     usage: str = ""                            # shown when a required arg is missing
     model_callable: bool = False               # opt-in: exposed to the model as an Ollama tool (4.5f NL dispatch)
+    model_handler: "Callable[[dict], str] | None" = None  # model path: validated args dict → result text for the model
 
 
 class ToolRegistry:
@@ -60,6 +61,11 @@ class ToolRegistry:
         self._ordered: list[Tool] = []
 
     def register(self, tool: Tool) -> None:
+        if tool.model_callable and tool.model_handler is None:
+            # Slash handlers print and start their own turn; calling one from
+            # inside a turn would deadlock on the turn mutex. The model path
+            # needs a handler that RETURNS its result instead.
+            raise ValueError(f"model_callable tool needs a model_handler: {tool.name}")
         target = self._by_exact if tool.exact else self._by_token
         for token in (tool.name, *tool.aliases):
             token = token.lower()
@@ -71,6 +77,13 @@ class ToolRegistry:
     def get(self, token: str) -> "Tool | None":
         t = token.lower()
         return self._by_exact.get(t) or self._by_token.get(t)
+
+    def get_function(self, name: str) -> "Tool | None":
+        """Look up a model-callable tool by its Ollama function name ("read")."""
+        for t in self._ordered:
+            if t.model_callable and t.name.lstrip("/") == name:
+                return t
+        return None
 
     def tools(self) -> list:
         """Tools in registration order (for the help line / a future /help)."""
