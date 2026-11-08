@@ -36,6 +36,7 @@ class Tool:
     takes_args: bool = False                   # if True and no args given → print usage
     arg_hint: str = ""                         # placeholder for the help line, e.g. "<file>"
     usage: str = ""                            # shown when a required arg is missing
+    model_callable: bool = False               # opt-in: exposed to the model as an Ollama tool (4.5f NL dispatch)
 
 
 class ToolRegistry:
@@ -74,6 +75,33 @@ class ToolRegistry:
     def tools(self) -> list:
         """Tools in registration order (for the help line / a future /help)."""
         return list(self._ordered)
+
+    def to_ollama_tools(self) -> list[dict]:
+        """
+        Export model-callable tools as Ollama's `tools` array (4.5f NL dispatch).
+
+        Only tools with model_callable=True are exposed — opt-in, so a new tool
+        is never handed to the model by accident. The function name drops the
+        leading slash ("/read" → "read"); params_schema is passed through as
+        plain JSON Schema (keeps the Stage 7 MCP adapter free).
+
+        Ollama does NOT validate arguments against these schemas. Validation on
+        receipt stays our job (impr. #2), and every model-originated call still
+        routes through propose_action() (ADR-001: model invocation ≠ approval).
+        """
+        out = []
+        for t in self._ordered:
+            if not t.model_callable:
+                continue
+            out.append({
+                "type": "function",
+                "function": {
+                    "name": t.name.lstrip("/"),
+                    "description": t.description,
+                    "parameters": t.params_schema or {"type": "object", "properties": {}},
+                },
+            })
+        return out
 
     def format_commands(self) -> str:
         """Build the 'Commands: ...' line from the live registry (never stale)."""

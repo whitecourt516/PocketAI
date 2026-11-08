@@ -280,6 +280,7 @@ registry.register(Tool(
     handler=_tool_memory,
     description="Report how many entries are stored in ChromaDB.",
     risk="low",
+    model_callable=True,  # 4.5f NL dispatch: exposed to the model, still gated
     params_schema={"type": "object", "properties": {}},
 ))
 
@@ -306,6 +307,7 @@ registry.register(Tool(
     arg_hint="<file>",
     usage="[/read requires a filepath]",
     risk="low",
+    model_callable=True,  # 4.5f NL dispatch: exposed to the model, still gated
     params_schema={
         "type": "object",
         "properties": {"filepath": {"type": "string", "description": "Text file to read"}},
@@ -336,6 +338,7 @@ registry.register(Tool(
     arg_hint="<query>",
     usage="[/search requires a query]",
     risk="low",
+    model_callable=True,  # 4.5f NL dispatch: exposed to the model, still gated
     params_schema={
         "type": "object",
         "properties": {"query": {"type": "string", "description": "Web search query"}},
