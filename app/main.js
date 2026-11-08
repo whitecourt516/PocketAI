@@ -84,6 +84,11 @@ function createAvatarWindow() {
 
   avatarWindow.loadFile('renderer/avatar.html');
 
+  // Debug: set POCKET_DEVTOOLS=1 before Start-Avatar.bat to open the renderer console
+  if (process.env.POCKET_DEVTOOLS) {
+    avatarWindow.webContents.openDevTools({ mode: 'detach' });
+  }
+
   // Click-through when not interacting — mouse clicks pass to windows below
   // Hold Alt to drag the otter manually if needed
   avatarWindow.setIgnoreMouseEvents(true, { forward: true });

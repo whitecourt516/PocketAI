@@ -260,9 +260,10 @@
 
 </div>
 
-<!-- Live2D SDK (load if model present) -->
-<!-- <script src="../model/live2dcubismcore.min.js"></script> -->
-<!-- <script src="../model/pixi.min.js"></script> -->
+<!-- Live2D SDK — local copies in renderer/vendor/ (same files as the eye test) -->
+<script src="vendor/live2dcubismcore.min.js"></script>
+<script src="vendor/pixi.min.js"></script>
+<script src="vendor/cubism4.min.js"></script>
 
 <script>
 // ─────────────────────────────────────────────────────────────────────────────
@@ -277,6 +278,18 @@ const labelEl    = document.getElementById('expression-label');
 
 let subtitleTimer = null;
 let currentExpression = 'neutral';
+
+// ── Live2D config ─────────────────────────────────────────────────────────────
+const LIVE2D = {
+  modelPath: '../model/Otter.model3.json',   // relative to renderer/
+  lookAround: {
+    minMs: 1500,                              // shortest gap between glances
+    maxMs: 4500,                              // longest gap between glances
+  },
+};
+
+let live2dModel = null;     // set once the real model loads
+let lookTimer = null;
 
 // ── Expressions ───────────────────────────────────────────────────────────────
 const EXPRESSIONS = {
@@ -328,28 +341,87 @@ if (window.pocket) {
   window.pocket.onSubtitle((data) => showSubtitle(data));
 
   window.pocket.onWander(({ x, y, duration }) => {
-    // Visual nudge on wander — subtle tilt
-    otterEl.style.transition = `transform ${duration * 0.3}ms ease`;
+    // Visual nudge on wander — subtle tilt on whichever otter is showing
+    const el = live2dModel ? document.getElementById('live2d-canvas') : otterEl;
+    el.style.transition = `transform ${duration * 0.3}ms ease`;
     const tilt = Math.random() > 0.5 ? 3 : -3;
-    otterEl.style.transform = `rotate(${tilt}deg)`;
+    el.style.transform = `rotate(${tilt}deg)`;
     setTimeout(() => {
-      otterEl.style.transform = '';
+      el.style.transform = '';
     }, duration * 0.6);
   });
 }
 
-// ── Live2D loader (called when real model is dropped in) ──────────────────────
-// This will be expanded when your otter moc3 is ready.
-// For now the placeholder SVG handles all visual states.
-function loadLive2DModel(modelPath) {
-  console.log('[Pocket] Live2D model path set:', modelPath);
-  // TODO: initialize PIXI + Live2DSprite with modelPath
-  // document.getElementById('placeholder').style.display = 'none';
-  // document.getElementById('live2d-canvas').style.display = 'block';
+// ── Live2D loader ─────────────────────────────────────────────────────────────
+// Loads the real otter into #live2d-canvas. If anything fails, the placeholder
+// SVG stays up so Pocket still has a face (graceful degradation).
+async function loadLive2DModel(modelPath) {
+  if (typeof Live2DCubismCore === 'undefined' || typeof PIXI === 'undefined' || !PIXI.live2d) {
+    console.warn('[Pocket] Live2D runtime missing from renderer/vendor/ — keeping placeholder');
+    return;
+  }
+
+  const canvas = document.getElementById('live2d-canvas');
+  try {
+    const app = new PIXI.Application({
+      view: canvas,
+      width: canvas.clientWidth || 300,
+      height: canvas.clientHeight || 360,
+      backgroundAlpha: 0,                       // transparent, window shows through
+      antialias: true,
+      resolution: window.devicePixelRatio || 1,
+      autoDensity: true,
+    });
+
+    // autoInteract off: the window is click-through, so we drive focus ourselves
+    const model = await PIXI.live2d.Live2DModel.from(modelPath, { autoInteract: false });
+    app.stage.addChild(model);
+
+    // Fit inside the canvas, anchored bottom-centre so the name tag sits under it
+    const w = app.screen.width;
+    const h = app.screen.height;
+    const scale = Math.min(w / model.internalModel.width, h / model.internalModel.height);
+    model.scale.set(scale);
+    model.x = (w - model.width) / 2;
+    model.y = h - model.height;
+
+    live2dModel = model;
+    document.getElementById('placeholder').style.display = 'none';
+    canvas.style.display = 'block';
+
+    console.log('[Pocket] Live2D model loaded:', modelPath);
+    console.log('[Pocket] Auto blink:', model.internalModel.eyeBlink ? 'on' : 'OFF (no EyeBlink group in model3.json)');
+
+    startLookAround();
+  } catch (err) {
+    console.error('[Pocket] Live2D load failed — keeping placeholder:', err);
+  }
+}
+
+// ── Idle look-around ──────────────────────────────────────────────────────────
+// Every few seconds the otter glances at a random spot. focus() eases the
+// eyeballs and head toward it, so this stays smooth with no per-frame code.
+// Runs entirely in the renderer — nothing goes over the WebSocket.
+function startLookAround() {
+  if (lookTimer) clearTimeout(lookTimer);
+  const { minMs, maxMs } = LIVE2D.lookAround;
+
+  const glance = () => {
+    if (!live2dModel) return;
+    const canvas = document.getElementById('live2d-canvas');
+    // Mostly look near centre, occasionally further out
+    const spread = Math.random() < 0.7 ? 0.25 : 0.5;
+    const x = canvas.clientWidth  * (0.5 + (Math.random() * 2 - 1) * spread);
+    const y = canvas.clientHeight * (0.4 + (Math.random() * 2 - 1) * spread);
+    live2dModel.focus(x, y);
+    lookTimer = setTimeout(glance, minMs + Math.random() * (maxMs - minMs));
+  };
+  glance();
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 setExpression('neutral');
+loadLive2DModel(LIVE2D.modelPath);
 console.log('[Pocket] Avatar renderer ready');
 </script>
 

@@ -36,6 +36,12 @@ piper/voices/
 *.onnx
 *.bin
 
+# Live2D otter: commissioned art + Live2D runtime.
+# Not committed (artist's work, 33MB texture, Cubism Core license).
+# Populated locally by Pocket_AI_Art\sync-otter.ps1
+app/model/
+app/renderer/vendor/
+
 # =========================
 # OS / Editor
 # =========================
