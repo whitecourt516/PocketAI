@@ -9,6 +9,7 @@
 #   - nl_dispatch.run_with_tools(): gate on every call, validate on receipt,
 #     one repair re-request, decline / handler failure handled, no deadlock path
 #   - orchestrator.run_turn(allow_tools=...): default path unchanged, tool turns not persisted
+#   - closing cut: A4 lifecycle list covers every PocketModule once; Monitor has no dead param
 
 from unittest.mock import patch
 
@@ -292,6 +293,39 @@ def test_run_turn_paths():
     print("PASS run_turn — default path unchanged; tool turn kept in history, not persisted")
 
 
+# ── closing cut: A4 lifecycle + dead Monitor param ──────────────────────────
+
+def test_lifecycle_covers_all_modules():
+    """Every PocketModule singleton is in pocket.LIFECYCLE exactly once, logger first."""
+    import inspect
+    import pocket
+    from core.pocket_module import PocketModule
+
+    lc = pocket.LIFECYCLE
+    assert lc[0] is pocket.logger_module, "logger must start first (and stop last)"
+    assert len({id(m) for m in lc}) == len(lc), "a module is listed twice (double start)"
+    assert all(isinstance(m, PocketModule) for m in lc), "non-PocketModule in LIFECYCLE"
+
+    covered = {type(m) for m in lc}
+    missing = [c.__name__ for c in PocketModule.__subclasses__()
+               if c not in covered and c.__module__.startswith("core.")]
+    assert not missing, f"PocketModules not in LIFECYCLE: {missing}"
+
+    src = inspect.getsource(pocket.main)
+    assert "tts_worker" not in src, "main() still hand-starts the tts worker"
+    print(f"PASS lifecycle — {len(lc)} modules, each once, logger first, no hand-wired tts worker")
+
+
+def test_monitor_dead_param_gone():
+    """create_monitor / ServiceMonitor no longer take send_to_avatar_fn."""
+    import inspect
+    from core.monitor import ServiceMonitor, create_monitor
+
+    for fn in (ServiceMonitor.__init__, create_monitor):
+        assert "send_to_avatar_fn" not in inspect.signature(fn).parameters, f"{fn.__qualname__} still has it"
+    print("PASS monitor — dead send_to_avatar_fn param removed")
+
+
 if __name__ == "__main__":
     test_to_ollama_tools_opt_in()
     test_chat_call_shape_unchanged()
@@ -306,4 +340,6 @@ if __name__ == "__main__":
     test_malformed_twice_never_runs()
     test_handler_failure_reported()
     test_run_turn_paths()
+    test_lifecycle_covers_all_modules()
+    test_monitor_dead_param_gone()
     print("\nAll 4.5f NL-dispatch checks passed.")

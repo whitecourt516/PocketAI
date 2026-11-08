@@ -40,16 +40,14 @@ from core.memory import (
     save_memory,
     get_relevant_memories,
     load_knowledge_file,
-    bootstrap_knowledge,
 )
 from core.tts import (
     tts_queue,
     tts_module,
     speaking_flag,
-    tts_worker,
 )
 from core.stt import (
-    init_whisper,
+    stt_module,
     keyboard_listener,
 )
 from core.websocket_server import websocket_module, send_dict_to_avatar
@@ -60,6 +58,14 @@ from core.llm import (
 )
 from core.orchestrator import session_history
 from core.health_check import run_startup_checks
+from core.config_loader import config_loader_module
+from core.event_bus import event_bus_module
+from core.permissions import permissions_module
+from core.backup_manager import backup_manager_module
+from core.file_editor import file_editor_module
+from core.executor import executor_module
+from core.web_search import web_search_module
+from core.avatar_router import avatar_router_module
 from core.monitor import create_monitor
 from core.debug_overlay import DebugOverlay
 from pathlib import Path
@@ -74,6 +80,28 @@ from core.tool_registry import registry, Tool
 
 monitor = None  # set in main(), read in cli_input_loop() for cleanup
 overlay = None  # set in main(), read in cli_input_loop() for cleanup
+
+# ── Module lifecycle (4s contract, A4) ────────────────────────────────────────
+# Every PocketModule starts here, in dependency order, and stops in reverse.
+# This is the ONLY place modules start: no hand-wired .start() calls or worker
+# threads elsewhere (that was the tts_worker double-start hazard).
+LIFECYCLE = [
+    logger_module,          # first: everything below logs
+    config_loader_module,
+    event_bus_module,
+    permissions_module,     # ensures logs/ for the decision log
+    backup_manager_module,  # ensures the backup dir
+    file_editor_module,
+    executor_module,
+    web_search_module,
+    memory_module,          # bootstrap_knowledge()
+    stt_module,             # init_whisper()
+    websocket_module,       # avatar connection thread
+    avatar_router_module,
+    tts_module,             # tts-worker thread (the one and only)
+    llm_module,             # lazy Ollama client; health_check pings it
+]
+_started = []  # modules whose start() ran, in order — stopped in reverse
 
 def altd_listener():
     """Alt+D hotkey — prints a one-shot debug overlay snapshot."""
@@ -110,9 +138,12 @@ def _shutdown():
         overlay.stop()
     if monitor:
         monitor.stop()
-    websocket_module.stop()
     log.info("pocket", "Pocket signing off")
-    logger_module.stop()
+    for module in reversed(_started):  # logger stops last
+        try:
+            module.stop()
+        except Exception as e:  # stop() must never raise (4s); don't let one block exit
+            print(f"  [{type(module).__name__}.stop() error: {e}]")
     print(f"\n  [Pocket signing off. Later{' ' + CFG['user_name'] if CFG['user_name'] else ''}.]\n")
     os._exit(0)
 
@@ -461,12 +492,11 @@ def main():
     print(f"║{greeting.center(width)}║")
     print(f"╚{'═' * width}╝\n")
 
-    logger_module.start()
-    log.info("pocket", "Pocket starting up")
-
-    bootstrap_knowledge()
-    init_whisper()
-    websocket_module.start()
+    for module in LIFECYCLE:
+        module.start()
+        _started.append(module)
+        if module is logger_module:
+            log.info("pocket", "Pocket starting up")
 
     bus.subscribe("connection.websocket.connected",    logger_module.on_event)
     bus.subscribe("connection.websocket.disconnected", logger_module.on_event)
@@ -475,10 +505,6 @@ def main():
 
     bus.subscribe("connection.websocket.degraded",  on_websocket_degraded)
     bus.subscribe("connection.websocket.connected", on_websocket_connected)
-
-    # TTS worker thread
-    tts_thread = threading.Thread(target=tts_worker, daemon=True)
-    tts_thread.start()
 
     # F9 keyboard listener thread
     kb_thread = threading.Thread(
@@ -498,7 +524,7 @@ def main():
 
     # Continuous self-monitoring (Stage 4j.1)
     global monitor
-    monitor = create_monitor(modules, send_to_avatar_fn=send_dict_to_avatar)
+    monitor = create_monitor(modules)
     monitor.start()
 
     # Runtime debug overlay (Stage 4t)

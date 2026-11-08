@@ -6,15 +6,15 @@ Lightweight background thread that periodically checks each service's health
 and writes results into the Runtime State Manager (4r) via update_health().
 
 On state change (healthy → unhealthy or vice versa):
-  - Prints a warning to terminal
-  - Sends an alert event to the avatar (expression change)
+  - Routes through core.degradation (mark_degraded / mark_recovered), which
+    handles the terminal warning, logging, and the bus event
 
 Nothing is done automatically beyond alerting. Pocket reports, the user decides.
 """
 
 import threading
 import time
-from typing import Optional, Callable
+from typing import Optional
 
 from core.state_manager import state
 from core.degradation import mark_degraded, mark_recovered
@@ -31,24 +31,21 @@ CHROMA_WARN_SIZE_MB      = 500      # warn if chroma_data grows beyond this
 class ServiceMonitor:
     """
     Monitors all registered services in a background daemon thread.
-    Writes health booleans into state_manager. Emits avatar alerts on degradation.
+    Writes health booleans into state_manager. Alerts go through core.degradation.
     """
 
     def __init__(
         self,
         modules: dict,
-        send_to_avatar_fn: Optional[Callable] = None,
         interval: int = DEFAULT_INTERVAL_SECONDS,
     ):
         """
         Args:
             modules:            dict mapping service key → PocketModule instance
                                 Expected keys: "llm", "memory", "tts", "ws"
-            send_to_avatar_fn:  callable(command_dict) — sends events to Electron avatar
             interval:           seconds between health checks
         """
         self._modules         = modules
-        self._send_to_avatar  = send_to_avatar_fn
         self._interval        = interval
         self._stop_event      = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -155,14 +152,14 @@ class ServiceMonitor:
 
 # ─── Convenience factory ──────────────────────────────────────────────────────
 
-def create_monitor(modules: dict, send_to_avatar_fn=None, interval: int = DEFAULT_INTERVAL_SECONDS) -> ServiceMonitor:
+def create_monitor(modules: dict, interval: int = DEFAULT_INTERVAL_SECONDS) -> ServiceMonitor:
     """
     Create and return a ServiceMonitor instance (not yet started).
     Call .start() after Pocket's main loop is ready.
 
     Usage in pocket.py:
         from core.monitor import create_monitor
-        monitor = create_monitor(modules, send_to_avatar_fn=send_to_avatar)
+        monitor = create_monitor(modules)
         monitor.start()
     """
-    return ServiceMonitor(modules, send_to_avatar_fn, interval)
+    return ServiceMonitor(modules, interval)
