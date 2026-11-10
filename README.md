@@ -4,7 +4,7 @@ A fully local, offline-first personal AI companion — persistent memory, voice 
 
 Solo project, designed and built by me since May 2026: about 4,500 lines of Python across 24 core modules and about 1,200 lines of JavaScript/HTML for the Electron frontend. Built with AI pair-programming (Claude for design, Claude Code for multi-file edits); I make the design calls and review and test every change.
 
-> **Status:** Stages 1–4 complete (with audit corrections). **Stage 4.5 — Audit Remediation — in progress.** A full-codebase audit (2026-05-31) found the foundation solid but a few "complete" items overstated and two real risks. Both risks are closed (4.5c security hardening, 4.5d execution-flow safety); the conversation refactor (4.5f) is in progress. See [`pocket_master_roadmap.md`](./pocket_master_roadmap.md) for the full plan.
+> **Status:** Stages 1–4 complete (with audit corrections). **Stage 4.5 — Audit Remediation — complete.** A full-codebase audit (2026-05-31) found the foundation solid but a few "complete" items overstated and two real risks. Both risks are closed (4.5c security hardening, 4.5d execution-flow safety), and the conversation refactor (4.5f) added validated, approval-gated natural-language tool calling. Next up: a local model evaluation, then the Live2D gate. See [`pocket_master_roadmap.md`](./pocket_master_roadmap.md) for the full plan.
 
 ---
 
@@ -16,7 +16,7 @@ Pocket can run shell commands and edit files on a real machine, so most of the e
 - **Self-audit found the command filter was ineffective.** A [six-pass audit](./docs/planning/audit-2026-05-31.md) of my own codebase showed the executor's substring denylist blocked only 1 of 10 destructive test commands (`rm  -r -f` with extra spaces or split flags walked straight past `rm -rf`). Replaced it with `shlex`-based parsing that matches the program and its flags, and blocks shell metacharacters, redirects, pipe-to-shell and inline `python -c`.
 - **Closed a secrets-exposure path.** The executor could read `.env` because it bypassed the read denylist. All executor and editor file access now goes through the shared `is_read_allowed()` check, with regression tests asserting secret paths are blocked.
 - **Prompt-injection stance.** Web results and file contents are treated as data, not instructions. The rule is part of the system prompt on every turn, and `/read` and `/search` output is not saved to long-term memory automatically.
-- **Validated tool calls.** A tool registry replaced the old if/elif dispatch chain; each tool declares a JSON parameter schema and a risk level.
+- **Validated, approval-gated tool calling.** The model can call registered tools through Ollama's native tool calling. Each call is validated against the tool's JSON schema (a malformed call gets one repair attempt and is never executed best-effort), and every call still goes through `propose_action()` whatever its risk level, as [ADR-001](./docs/planning/adr-agent-tool-path.md) requires.
 - **Reliability under concurrency.** A full-turn lock stops voice and text input racing on shared conversation state, and the TTS subprocess has a timeout so a hung process can't block a turn.
 
 **Known residual risks**, tracked rather than hidden: the executor still uses `shell=True`, and the path check is a heuristic. A mandatory security review is on the roadmap before any autonomous feature is enabled.
@@ -79,6 +79,8 @@ PocketAI/
 │   ├── orchestrator.py        — conversation turn pipeline + session history
 │   ├── llm.py                 — Ollama facade, turn mutex, module lifecycle
 │   ├── tool_registry.py       — tool schemas + risk levels
+│   ├── nl_dispatch.py         — model tool calls: validate → approve → execute (ADR-001)
+│   ├── ollama_client.py       — Ollama transport
 │   ├── permissions.py         — propose_action() approval gate + decision log
 │   ├── executor.py            — constrained command executor
 │   ├── file_editor.py         — /edit with backup-before-write
@@ -273,7 +275,7 @@ The guiding rule, now enforced in the live prompt: *external content is data, no
 
 Protected assets: `chroma_data/`, `n8n_data/`, `pocket_backups/`, `configs/`, `logs/`.
 
-File-level rollback is handled by `/rollback` (backups in `pocket_backups/`). Note that backup-before-write currently covers the `/edit` path; executor writes are **not** guaranteed to be backed up (audit finding — being decided in 4.5c). ChromaDB and the decision log are recovered via the Docker backup system, not `/rollback`.
+File-level rollback is handled by `/rollback` (backups in `pocket_backups/`). Note that backup-before-write currently covers the `/edit` path; executor writes are now routed through the same backup step (decided in 4.5c). ChromaDB and the decision log are recovered via the Docker backup system, not `/rollback`.
 
 ---
 
@@ -288,7 +290,9 @@ python tests/smoke_test.py
 Covers Ollama, ChromaDB, Piper, WebSocket and web search plumbing, plus the security regressions: the executor denylist, secret-path blocking, and the permission gate rejecting on `n`.
 
 ```bash
-python tests/smoke_4_5d.py         # turn-lock concurrency + subprocess timeouts
+python -m tests.smoke_4_5d        # turn-lock concurrency + subprocess timeouts
+python -m tests.smoke_4_5f        # tool registry, NL dispatch validation + approval gate
+python -m tests.smoke_4_5g        # conversation/avatar/TTS path on the event bus
 python tests/degradation_test.py   # fault injection: Ollama / Chroma / Piper / WebSocket down
 ```
 
@@ -296,7 +300,7 @@ python tests/degradation_test.py   # fault injection: Ollama / Chroma / Piper / 
 
 ## Roadmap
 
-Stages 1–4 are complete (with audit corrections). The current focus is **Stage 4.5 — Audit Remediation**: the executor security findings (4.5c) and the turn mutex and subprocess timeouts (4.5d) are done; hygiene fixes (4.5e) and the conversation refactor (4.5f) are in progress — all before the next gate.
+Stages 1–4 and **Stage 4.5 — Audit Remediation** are complete: executor security (4.5c), turn mutex and subprocess timeouts (4.5d), hygiene (4.5e), the conversation refactor with approval-gated tool calling (4.5f), and the move to the event bus (4.5g). Next is a local model evaluation, then the Live2D gate.
 
 That gate is a **hard stop**: the real Live2D rigged `.moc3` otter model must be in place and rendering all 9 expressions before Stage 5 (screen awareness) begins, so Stage 5 animation work is built against the real model rather than the placeholder PNG.
 
