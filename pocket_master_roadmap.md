@@ -41,7 +41,7 @@
 |Voice input/output|✅ Done|Whisper + Piper|
 |Avatar visual interface|⚠️ Backend done, frontend placeholder|9-expression routing is real; the PNG can't show it — needs Live2D model|
 |File read/write|✅ Done|`/read` + `/edit` with backup-before-write|
-|Sandboxed code execution|✅ Hardened|Constrained executor + approval gate; substring denylist replaced, `/exec → .env` leak closed (4.5c)|
+|Constrained code execution|✅ Hardened|Constrained executor + approval gate; substring denylist replaced, `/exec → .env` leak closed (4.5c)|
 |Web search|✅ Done|Tavily, pluggable|
 |Screen awareness|⚠️ Doable but tricky|Stage 5 — needs multimodal vision model + VRAM budget|
 |Proactive suggestions|⚠️ Doable but tricky|Stage 5 — builds on screen awareness + turn mutex|
@@ -172,7 +172,7 @@ The audit's headline finding: the executor's safety boundary was theater. Empiri
   - ✅ **Retrieval as a separable, injectable step (impr. #4)** (DONE — `run_turn(text, persist, prefetched=None)`, commit `766f5f2`): the orchestrator must expose memory retrieval as a standalone unit whose result can be *passed into* the turn (e.g. `prefetched=None`, fall back to inline retrieval when absent), so Stage 5 speculative prefetch wires in without touching the turn lock. The lock stays full-turn scope (impr. #9); prefetch *feeds* the turn, it does not bypass the lock. **Do this here, not in 4.5d** (4.5d would have been the second touch).
 - ✅ **Tool registry** (DONE) — the if/elif command chain in `cli_input_loop()` is replaced by the schema-first `ToolRegistry` (`core/tool_registry.py`); the startup `Commands:` line generates from it. Sets up Stage 7's tool ecosystem.
   - **Schema-first contract (impr. #2):** build the registry so every tool carries an explicit JSON schema validated *on receipt* before any execution attempt, with a re-request cycle on malformed output rather than a silent try/except. Reliability comes from the schema discipline, not the model — the schema is the hard boundary.
-- ✅ **Decide the agent→tool path explicitly** (DONE — ADR-001, `docs/planning/adr-agent-tool-path.md`) — model-selected tool calls route uniformly through `propose_action()`; core invariant "model invocation ≠ approval." Slash commands typed by Eddie are themselves approval. The `risk` field stays metadata-only until 8p.
+- ✅ **Decide the agent→tool path explicitly** (DONE — ADR-001, `docs/planning/adr-agent-tool-path.md`) — model-selected tool calls route uniformly through `propose_action()`; core invariant "model invocation ≠ approval." Slash commands typed by the user are themselves approval. The `risk` field stays metadata-only until 8p.
   - **LLM-out-of-execution-loop is the architecture, not a convention (impr. #3):** the LLM decides *what*, deterministic code handles *how*. The registry defines legal call shapes; the executor only accepts validated calls; nothing else gets through. The 4.5c constrained executor + `propose_action()` gate already implement this correctly — the rule here is *don't soften it*: no broad try/except, no fallback execution paths that route around the gate.
 - ✅ **Natural-language tool dispatch** (DONE — `core/nl_dispatch.py`; tools opted in with `model_callable` + `model_handler`: `memory`, `read`, `search`; typed turns only, since `propose_action()` reads stdin; undeclared args dropped before validation after Llama invented `db_name`; `tests/probe_nl_dispatch.py` is the live-model probe) — thin layer on the registry: expose registered tools as model-callable schemas so plain-language requests map to a *proposed* tool call routed through `propose_action()` (still y/n; slash commands kept as the fast path). Rides after the registry + 4.5c. The actual fix for the "everything is a manual slash command" friction.
   - **Use Ollama's native tool API (Oct 2026 review):** pass the registry's schemas as the `tools` array on `/api/chat` and read structured `tool_calls` back. Ollama does **not** validate arguments against the schema, so validate-on-receipt (impr. #2) stays the hard boundary. Keep `params_schema` as plain JSON Schema so the Stage 7 MCP adapter is free.
@@ -184,7 +184,7 @@ The audit's headline finding: the executor's safety boundary was theater. Empiri
 
 - Commit the conversation/avatar/TTS path to the event bus (kills the real `tts ↔ degradation` cycle and the lazy-import dodges scattered through `llm`/`degradation`/`health_check` — e.g. the `from core.avatar_router import send_to_avatar` lazy import inside `_run_turn`), **or** formally retire the bus. Running both half-heartedly is the current worst case. Do this before Stage 5 multiplies event sources.
 
-- **DECIDED (2026-11-08): commit to the bus** (Eddie approved the review's recommendation).
+- **DECIDED (2026-11-08): commit to the bus** (the user approved the review's recommendation).
 - **BUILT:** the orchestrator emits `websocket.send` → `avatar_router.send` → `tts.speak` (in that order; `bus.emit` is synchronous), and `degradation.notify()` uses the same events, so the `tts ↔ degradation` cycle and the lazy imports in orchestrator / degradation / web_search / logger are gone. All subscriptions live in one `EVENT_WIRING` table in `pocket.py`, wired before any module starts. `web.search` / `llm.query` / `memory.store` stay unwired until something emits them. Tests: `tests/smoke_4_5g.py`.
 - **Recommendation (Oct 2026 review):** commit to the bus. Comparable companion projects (Open-LLM-VTuber, AIRI) run voice → expression → TTS as one streamed event pipeline; retiring the bus would leave Stage 5's new event sources (screen, idle, prefetch) on lazy imports.
 
@@ -195,7 +195,7 @@ The audit's headline finding: the executor's safety boundary was theater. Empiri
 
 ## Near-Term — Model Evaluation: Qwen3 vs Qwen3.5 (impr. #1)
 
-> **Position:** queued after Stage 4.5 is fully complete (4.5f + 4.5g), per Eddie 2026-11-08; `qwen3.5:9b` is the expected pick, but still run the eval. NL dispatch gives it a real tool-call path to test against. Low-risk, ~afternoon of work. Independent of the Live2D gate. Llama 3.1 8B is still the running model — the Qwen3 swap was planned but has not happened yet.
+> **Position:** queued after Stage 4.5 is fully complete (4.5f + 4.5g), per the user 2026-11-08; `qwen3.5:9b` is the expected pick, but still run the eval. NL dispatch gives it a real tool-call path to test against. Low-risk, ~afternoon of work. Independent of the Live2D gate. Llama 3.1 8B is still the running model — the Qwen3 swap was planned but has not happened yet.
 
 - **Evaluate two candidates against Llama 3.1 8B, then swap to the winner:**
   - `qwen3:8b` — ~5.2GB Q4_K_M, strong native tool calling, thinking toggle. The original plan.
@@ -348,10 +348,10 @@ Continuous knowledge loading, fine-tuning experiments, capability expansion as t
 
 ## Stage 9+ — Experimental / Long-Game
 
-- **9a — Personal Cognitive Profile** — learns how Eddie thinks; adaptive explanation style.
+- **9a — Personal Cognitive Profile** — learns how the user thinks; adaptive explanation style.
 - **9b — Multi-Agent Internal Collaboration** — specialist agents orchestrated by Pocket.
 - **9c — Personal AI Research Lab** — architecture comparison, fine-tune experiments.
-- **9d — Thinking-Visibility Policy** *(was: Internal Monologue / Thought Layer)* — thinking models already reason privately before responding, and Ollama returns that reasoning separately, so the mechanism is solved. What remains is policy: what Pocket may think about, whether thoughts are logged, and whether Eddie can read them. No longer the most speculative item.
+- **9d — Thinking-Visibility Policy** *(was: Internal Monologue / Thought Layer)* — thinking models already reason privately before responding, and Ollama returns that reasoning separately, so the mechanism is solved. What remains is policy: what Pocket may think about, whether thoughts are logged, and whether the user can read them. No longer the most speculative item.
 
 ---
 
